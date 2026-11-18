@@ -171,6 +171,69 @@ export function lamppost(lit: boolean): Px {
   px.hline(1, 7, 29, C.snow5);
   px.set(2, 17, C.snow5);
   px.set(6, 17, C.snow4);
+  // a sprig of pine and a red ribbon tied under the lantern
+  for (const [x, y, c] of [
+    [2, 12, C.pine3],
+    [3, 11, C.pine4],
+    [5, 11, C.pine3],
+    [6, 12, C.pine2],
+    [4, 11, C.pine3],
+  ] as const)
+    px.set(x, y, c);
+  bow(px, 4, 13);
+  // a pine twist down the pole
+  for (const y of [20, 23, 26]) {
+    px.set(3, y, C.pine3);
+    px.set(5, y + 1, C.pine2);
+  }
+  return px;
+}
+
+/** A short wooden post with a lantern, tied with a ribbon: always burning. */
+export function lanternPost(): Px {
+  const px = new Px(7, 32);
+  px.blit(lantern(true), 0, 0);
+  px.vline(3, 11, 30, C.wood2);
+  px.vline(2, 11, 30, C.wood4);
+  px.vline(4, 12, 30, C.wood1);
+  for (const [x, y, c] of [
+    [1, 12, C.pine3],
+    [5, 12, C.pine2],
+    [2, 11, C.pine4],
+    [4, 11, C.pine3],
+  ] as const)
+    px.set(x, y, c);
+  bow(px, 3, 14);
+  px.ellipse(3.5, 30.5, 3.2, 1.2, C.snow5);
+  return px;
+}
+
+/** A small pine dressed for Christmas: soft bulbs, a gold star. */
+export function xmasTree(): Px {
+  const px = new Px(20, 33);
+  const tree = pine("small", 9);
+  px.blit(tree, 0, 1);
+  const r = rng(77);
+  const placed: Array<readonly [number, number]> = [];
+  for (let i = 0; i < 400 && placed.length < 11; i++) {
+    const x = 2 + Math.floor(r() * 16);
+    const y = 7 + Math.floor(r() * 20);
+    if (tree.alphaAt(x, y - 1) < 200 || tree.alphaAt(x, y) < 200) continue;
+    if (placed.some(([px2, py]) => Math.abs(px2 - x) + Math.abs(py - y) < 4)) continue;
+    placed.push([x, y]);
+  }
+  const warm = [C.bulbRed, C.bulbGold, C.bulbGreen, C.bulbWhite];
+  placed.forEach(([x, y], i) => px.set(x, y, warm[i % warm.length]!));
+  px.map(8, 0, [".a.", "aba", ".a."], { a: C.gold3, b: C.gold4 });
+  return px;
+}
+
+/** Three wrapped presents stacked by the workshop. */
+export function giftStack(boxes: readonly Px[]): Px {
+  const px = new Px(18, 16);
+  px.blit(boxes[2]!, 4, 0); // peeking over the back
+  px.blit(boxes[0]!, 0, 6);
+  px.blit(boxes[1]!, 7, 6);
   return px;
 }
 
@@ -357,6 +420,11 @@ export function fence(): Px {
     px.hline(0, 33, y - 1, C.snow5);
   }
   for (const x of [1, 12, 23]) px.hline(x, x + 2, 0, C.snow6);
+  // pine garland swagged along the top rail, a bow on each post
+  garland(px, 2, 13, 2, 2, 31);
+  garland(px, 13, 24, 2, 2, 32);
+  garland(px, 24, 33, 2, 2, 33);
+  for (const x of [2, 13, 24]) bow(px, x, 2);
   return px;
 }
 

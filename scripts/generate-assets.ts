@@ -28,8 +28,11 @@ import {
   SKY_TOP,
   SLEIGH_PARK,
   SPAWN,
+  STRANDS,
+  BULB_COLORS,
   TREE,
   WORLD,
+  paintStrand,
   sizesOf,
   worldProps,
   type BuildingId,
@@ -108,6 +111,8 @@ save("decorations/lamppost.png", D.lamppost(false));
 save("decorations/lamppost-lit.png", D.lamppost(true));
 save("decorations/snowman.png", D.snowman());
 save("decorations/candy-cane.png", D.candyCane());
+save("decorations/lantern-post.png", D.lanternPost());
+save("decorations/xmas-tree.png", D.xmasTree());
 save("decorations/fence.png", D.fence());
 save("decorations/fence-side.png", B.fenceSide(36));
 save("decorations/bench.png", B.bench());
@@ -139,10 +144,15 @@ save("effects/flake.png", flake);
 const dot = new Px(1, 1);
 dot.set(0, 0, C.snow6);
 save("effects/dot.png", dot);
+// a soft, nearer snowflake that drifts past the camera now and then
+const big = new Px(3, 3);
+big.map(0, 0, [".a.", "aba", ".a."], { a: C.snow4, b: C.snow6 });
+save("effects/flake-large.png", big);
 
 // ---------------------------------------------------------------- gifts + characters
 for (const id of Object.keys(WRAPS) as WrapId[]) save(`gifts/box-${id}.png`, giftBox(id));
 for (const [id, draw] of Object.entries(ITEMS)) save(`gifts/item-${id}.png`, draw());
+save("decorations/gifts.png", D.giftStack([giftBox("crimson"), giftBox("pine"), giftBox("ivory")]));
 save("ui/paper.png", paper.paperTile());
 save("ui/holly.png", paper.holly());
 save("ui/stamp.png", paper.stamp());
@@ -244,6 +254,15 @@ function compose(
           l.x,
           l.y,
         ),
+    });
+  for (const s of STRANDS)
+    items.push({
+      z: s.z,
+      draw: () => {
+        const bulbs = paintStrand(s, (x, y, c) => out.set(x - ox, y - oy, c));
+        if (s.kind === "lights" && (treeLit || s.group === "always"))
+          bulbs.forEach(([x, y], i) => D.bulb(out, x - ox, y - oy, BULB_COLORS[i % 4]!));
+      },
     });
   items.push({ z: BRIDGE.y + 9, draw: () => place("world/bridge-back.png", BRIDGE.x, BRIDGE.y) });
   items.push({ z: BRIDGE.y + 31, draw: () => place("world/bridge-front.png", BRIDGE.x, BRIDGE.y) });

@@ -208,6 +208,14 @@
       6,
       14
     ],
+    "decorations/lantern-post.png": [
+      7,
+      32
+    ],
+    "decorations/xmas-tree.png": [
+      20,
+      33
+    ],
     "decorations/fence.png": [
       34,
       11
@@ -300,6 +308,10 @@
       1,
       1
     ],
+    "effects/flake-large.png": [
+      3,
+      3
+    ],
     "gifts/box-crimson.png": [
       11,
       10
@@ -347,6 +359,10 @@
     "gifts/item-golden-star.png": [
       24,
       24
+    ],
+    "decorations/gifts.png": [
+      18,
+      16
     ],
     "ui/paper.png": [
       48,

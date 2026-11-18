@@ -9,10 +9,12 @@ import {
   postcardFrame,
   SLEIGH_PICKUP,
   SPAWN,
+  STRANDS,
   doorStand,
   isWater,
   obstacles,
   sizesOf,
+  strandPixels,
   worldProps,
   type BuildingId,
   type BuildingMeta,
@@ -87,5 +89,20 @@ test("each house's postcard frames the whole house with the doorstep above the c
     assert.ok(b.y >= top, `${id} roof is inside the frame`);
     for (const [, y] of [m.door, m.gift])
       assert.ok(b.y + y - top < POSTCARD.cardTop - 4, `${id} doorstep stays above the card`);
+  }
+});
+
+test("string lights hang as one unbroken wire, with bulbs along it, inside the map", () => {
+  for (const s of STRANDS) {
+    const { wire, beads } = strandPixels(s);
+    assert.ok(beads.length >= 2, "a strand carries at least two bulbs or flags");
+    for (let i = 1; i < wire.length; i++) {
+      const [ax, ay] = wire[i - 1]!;
+      const [bx, by] = wire[i]!;
+      assert.ok(Math.abs(bx - ax) <= 1 && Math.abs(by - ay) <= 1, "no gaps in the wire");
+    }
+    const lowest = Math.max(...wire.map((p) => p[1]));
+    assert.ok(lowest >= Math.max(s.a[1], s.b[1]), "it sags, never arches");
+    for (const [x, y] of wire) assert.ok(x >= 0 && y >= 0 && x < WORLD.w && y < WORLD.h);
   }
 });

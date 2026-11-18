@@ -227,6 +227,7 @@ export type LampGroup = "always" | "plaza" | BuildingId;
 export const LAMPS: ReadonlyArray<{ x: number; y: number; group: LampGroup; step?: number }> = [
   { x: 548, y: 276, group: "always" },
   { x: 488, y: 330, group: "always" },
+  { x: 538, y: 330, group: "always" },
   { x: 420, y: 424, group: "plaza", step: 1 },
   { x: 596, y: 424, group: "plaza", step: 3 },
   { x: 418, y: 520, group: "plaza", step: 5 },
@@ -251,7 +252,10 @@ export type PropKind =
   | "crates"
   | "fence"
   | "fence-side"
-  | "candy-cane";
+  | "candy-cane"
+  | "lantern-post"
+  | "xmas-tree"
+  | "gifts";
 
 export type Prop = { kind: PropKind; x: number; y: number; flip?: boolean };
 
@@ -270,7 +274,13 @@ export const PROP_KINDS: Record<
   fence: { src: "decorations/fence.png", w: 34, h: 11, block: [0, 5, 34, 6] },
   "fence-side": { src: "decorations/fence-side.png", w: 6, h: 44, block: [1, 0, 5, 40] },
   "candy-cane": { src: "decorations/candy-cane.png", w: 6, h: 14, block: null },
+  "lantern-post": { src: "decorations/lantern-post.png", w: 7, h: 32, block: [2, 29, 3, 3] },
+  "xmas-tree": { src: "decorations/xmas-tree.png", w: 20, h: 33, block: [6, 26, 8, 6] },
+  gifts: { src: "decorations/gifts.png", w: 18, h: 16, block: [1, 10, 16, 5] },
 };
+
+/** Where a lantern post's flame sits, relative to the sprite (for its glow). */
+export const LANTERN_FLAME: Pt = [3.5, 5];
 
 const HAND_PROPS: Prop[] = [
   // plaza benches + workshop crates
@@ -294,7 +304,106 @@ const HAND_PROPS: Prop[] = [
   { kind: "fence", x: 258, y: 724 },
   { kind: "candy-cane", x: 500, y: 284 },
   { kind: "candy-cane", x: 520, y: 284 },
+  // Christmas touches at the places people pass: lanes, the sleigh, the way in
+  { kind: "candy-cane", x: 146, y: 290 },
+  { kind: "candy-cane", x: 166, y: 290 },
+  { kind: "candy-cane", x: 886, y: 282 },
+  { kind: "candy-cane", x: 906, y: 282 },
+  { kind: "gifts", x: 432, y: 288 },
+  { kind: "xmas-tree", x: 622, y: 250 },
+  { kind: "xmas-tree", x: 534, y: 760 },
+  { kind: "lantern-post", x: 486, y: 776 },
+  { kind: "lantern-post", x: 520, y: 776 },
+  { kind: "lantern-post", x: 176, y: 300 },
+  { kind: "lantern-post", x: 640, y: 730 },
 ];
+
+export const BULB_COLORS = ["#ef7466", "#ffd98a", "#8fd19e", "#fff4d6"] as const;
+const BULB_DARK = ["#6e2b34", "#7a4f28", "#24493f", "#6b665c"] as const;
+export const BUNTING_COLORS = ["#b94b4b", "#3c6654", "#f7f1e5"] as const;
+export const WIRE = "#1b1d29";
+
+/**
+ * Festoons: string lights (or a bunting) hung between two points, sagging
+ * `sag` pixels in the middle. `z` is the ground line used for depth; lights
+ * switch on with the lamps of the same group.
+ */
+export type Strand = {
+  a: Pt;
+  b: Pt;
+  sag: number;
+  z: number;
+  kind: "lights" | "bunting";
+  group: LampGroup;
+  step?: number;
+};
+const bridgeRail = (y: number, z: number): Strand[] =>
+  [2, 13, 24, 35].map((x, i, xs) => ({
+    a: [BRIDGE.x + x + 1, BRIDGE.y + y] as Pt,
+    b: [BRIDGE.x + (xs[i + 1] ?? 45) + 1, BRIDGE.y + y] as Pt,
+    sag: 2,
+    z: BRIDGE.y + z + 0.02,
+    kind: "lights" as const,
+    group: "woodland-cabin" as const,
+  }));
+export const STRANDS: readonly Strand[] = [
+  // over the street from the workshop, lit from the start
+  { a: [494, 348], b: [540, 348], sag: 7, z: 360, kind: "lights", group: "always" },
+  // across the plaza, north and south, as the plaza lamps come on
+  { a: [426, 442], b: [598, 442], sag: 14, z: 454, kind: "lights", group: "plaza", step: 3 },
+  { a: [424, 538], b: [600, 538], sag: 14, z: 550, kind: "lights", group: "plaza", step: 7 },
+  // the footbridge railings, once the cabin across it is served
+  ...bridgeRail(1, 9),
+  ...bridgeRail(23, 31),
+  // a little bunting at the way into the village
+  { a: [489, 777], b: [523, 777], sag: 6, z: 808, kind: "bunting", group: "always" },
+];
+
+/** The wire's pixels and the points where bulbs (or flags) hang. */
+export function strandPixels(s: Strand): { wire: Pt[]; beads: Pt[] } {
+  const [ax, ay] = s.a;
+  const [bx, by] = s.b;
+  const n = Math.max(1, Math.round(Math.abs(bx - ax)));
+  const wire: Pt[] = [];
+  const beads: Pt[] = [];
+  const every = s.kind === "bunting" ? 5 : 4;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const p: Pt = [
+      Math.round(ax + (bx - ax) * t),
+      Math.round(ay + (by - ay) * t + s.sag * 4 * t * (1 - t)),
+    ];
+    wire.push(p);
+    if (i > 1 && i < n - 1 && i % every === 2) beads.push(p);
+  }
+  return { wire, beads };
+}
+
+/**
+ * Paint a strand through `set`: the wire, unlit bulbs (or pennants). Returns
+ * where each bulb sits, so a lit layer can glow on top of it.
+ */
+export function paintStrand(s: Strand, set: (x: number, y: number, c: string) => void): Pt[] {
+  const { wire, beads } = strandPixels(s);
+  for (const [x, y] of wire) set(x, y, WIRE);
+  return beads.map(([x, y], i): Pt => {
+    if (s.kind === "lights") set(x, y + 1, BULB_DARK[i % BULB_DARK.length]!);
+    else {
+      const c = BUNTING_COLORS[i % BUNTING_COLORS.length]!;
+      for (const [dx, dy] of [
+        [-1, 1],
+        [0, 1],
+        [1, 1],
+        [-1, 2],
+        [0, 2],
+        [1, 2],
+        [0, 3],
+      ] as const)
+        set(x + dx, y + dy, c);
+    }
+    return [x, y + 1];
+  });
+}
 
 // ------------------------------------------------------------------ geometry
 
