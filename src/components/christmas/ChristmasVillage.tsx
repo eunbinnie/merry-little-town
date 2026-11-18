@@ -1,219 +1,183 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { COPY, GIFTS, HOUSE_NAMES } from "@/constants/copy";
-import { HOUSE_IDS, isComplete, type HouseId } from "@/features/village/game";
+import { useEffect, useRef, useState } from "react";
+import { BUILDING_NAMES, COPY, GIFTS } from "@/constants/copy";
+import { HOUSE_IDS, SACK_SIZE, isComplete, type GiftId } from "@/features/village/game";
 import { dispatch, useVillage } from "@/features/village/store";
-import { downloadBlob, renderPostcard, sharePostcard } from "@/features/sharing/postcard";
-import { VillageScene, HOUSE_META, asset } from "@/components/village/VillageScene";
-import { Snowfall } from "@/components/effects/Snowfall";
-import { GiftOpening } from "@/components/gifts/GiftOpening";
+import { composePostcard, downloadBlob, sharePostcard } from "@/features/sharing/postcard";
+import { ASSET_ROOT, BUILDING_IDS } from "@/game/world";
+import type { Destination, GameEvent, GameHandle } from "@/game/types";
 
 const TOTAL = HOUSE_IDS.length;
-const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const asset = (rel: string) => `${ASSET_ROOT}/${rel}`;
 
-type Flight = {
-  houseId: HouseId;
-  wrap: string;
-  from: DOMRect;
-  to: { x: number; y: number };
-  unit: number;
-};
-/** 0: idle · 1: last house lit, tree still dark · 2: tree lit, celebrating */
-type Celebration = 0 | 1 | 2;
+type Toast = { id: number; title: string; body?: string; items?: GiftId[] };
+type Photo = { url: string; blob: Blob };
 
-function Progress({ count, wraps }: { count: number; wraps: string[] }) {
+function Icon({
+  rel,
+  size = 24,
+  className = "",
+}: {
+  rel: string;
+  size?: number;
+  className?: string;
+}) {
   return (
-    <div className="flex items-center justify-center gap-3">
-      <div className="flex gap-1.5" aria-hidden>
-        {Array.from({ length: TOTAL }, (_, i) => (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={i}
-            src={asset(`gifts/box-${wraps[i] ?? "ivory"}-small.png`)}
-            alt=""
-            className={`pixel h-5 w-[22px] transition-opacity ${i < count ? "" : "opacity-25 grayscale"}`}
-          />
-        ))}
-      </div>
-      <span className="ui-shadow text-sm text-ivory" aria-live="polite">
-        {COPY.village.progress(count, TOTAL)}
-      </span>
-    </div>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={asset(rel)}
+      alt=""
+      width={size}
+      height={size}
+      className={`pixel ${className}`}
+      draggable={false}
+    />
   );
 }
 
 export function ChristmasVillage() {
   const village = useVillage();
-  const [selected, setSelected] = useState<HouseId | null>(null);
-  const [flight, setFlight] = useState<Flight | null>(null);
-  const [sparkle, setSparkle] = useState<HouseId | null>(null);
-  const [celebration, setCelebration] = useState<Celebration>(0);
-  const [status, setStatus] = useState(""); // visible result of save/share
-  const [announcement, setAnnouncement] = useState(""); // screen readers only
+  const host = useRef<HTMLDivElement>(null);
+  const game = useRef<GameHandle | null>(null);
+  const [ready, setReady] = useState(false);
+  const [intro, setIntro] = useState(false);
   const [busy, setBusy] = useState(false);
-  const flightRef = useRef<HTMLImageElement>(null);
-  const chipRef = useRef<HTMLDivElement>(null);
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const timers = useRef<number[]>([]);
-  const postcard = useRef<Promise<Blob> | null>(null);
+  const [moved, setMoved] = useState(false);
+  const [near, setNear] = useState<string | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+  const [photo, setPhoto] = useState<Photo | null>(null);
+  const [photoState, setPhotoState] = useState<"idle" | "making" | "flash">("idle");
+  const [photoStatus, setPhotoStatus] = useState("");
+  const restartRef = useRef<HTMLDialogElement>(null);
+  const photoRef = useRef<HTMLDialogElement>(null);
 
-  const later = useCallback((ms: number, fn: () => void) => {
-    timers.current.push(window.setTimeout(fn, ms));
-  }, []);
-  useEffect(() => () => timers.current.forEach((t) => window.clearTimeout(t)), []);
-
-  const phase = village?.phase;
-  const deliveries = village?.deliveries ?? [];
-  const complete = village ? isComplete(village) : false;
-
-  const commit = (houseId: HouseId) => {
-    const gift = village?.currentGift;
-    const willComplete = deliveries.length + 1 === TOTAL;
-    dispatch({ type: "deliver", houseId });
-    setFlight(null);
-    setSelected(null);
-    setSparkle(houseId);
-    if (gift)
-      setAnnouncement(COPY.selecting.delivered(HOUSE_NAMES[houseId], GIFTS[gift.giftId].name));
-    later(1800, () => setSparkle(null));
-    if (willComplete) {
-      const reduced = prefersReducedMotion();
-      setCelebration(1);
-      later(reduced ? 0 : 1200, () => setCelebration(2));
-      later(reduced ? 0 : 4200, () => setCelebration(0));
-    }
-  };
-
-  // gift flies from the bottom panel to the chosen doorstep, then the delivery commits
+  // Phaser is loaded only in the browser, once; React state never recreates it
   useEffect(() => {
-    const el = flightRef.current;
-    if (!flight || !el) return;
-    const { from, to } = flight;
-    const start = { x: from.left + from.width / 2, y: from.top + from.height / 2 };
-    const peak = { x: (start.x + to.x) / 2, y: Math.min(start.y, to.y) - 90 };
-    const t = (p: { x: number; y: number }, s: number) =>
-      `translate(${p.x}px, ${p.y}px) translate(-50%, -100%) scale(${s})`;
-    const anim = el.animate(
-      [
-        { transform: t(start, 2.2), opacity: 0 },
-        { transform: t(start, 2.2), opacity: 1, offset: 0.08 },
-        { transform: t(peak, 1.6), offset: 0.55 },
-        { transform: t(to, 1), opacity: 1 },
-      ],
-      { duration: 950, easing: "cubic-bezier(0.35, 0.1, 0.35, 1)", fill: "forwards" },
-    );
-    anim.onfinish = () => commit(flight.houseId);
-    return () => anim.cancel();
-    // only a new flight should restart the animation
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flight]);
-
-  const confirmDelivery = () => {
-    if (!selected || !village?.currentGift || flight) return;
-    const target = document.querySelector<HTMLElement>(`[data-house="${selected}"]`);
-    const chip = chipRef.current;
-    if (!target || !chip || prefersReducedMotion()) {
-      commit(selected);
-      return;
-    }
-    const m = HOUSE_META[selected];
-    const r = target.getBoundingClientRect();
-    const unit = r.width / m.w;
-    setFlight({
-      houseId: selected,
-      wrap: village.currentGift.wrapId,
-      from: chip.getBoundingClientRect(),
-      to: { x: r.left + m.gift[0] * unit, y: r.top + m.gift[1] * unit },
-      unit,
+    let handle: GameHandle | null = null;
+    let cancelled = false;
+    const onEvent = (e: GameEvent) => {
+      switch (e.type) {
+        case "ready":
+          return setReady(true);
+        case "intro":
+          return setIntro(e.playing);
+        case "busy":
+          return setBusy(e.busy);
+        case "moved":
+          return setMoved(true);
+        case "near":
+          return setNear(e.label);
+        case "celebrate":
+          return setAnnouncement(COPY.toast.complete);
+        case "toast":
+          setToast({ id: Date.now(), title: e.title, body: e.body, items: e.items });
+          setAnnouncement([e.title, e.body].filter(Boolean).join(". "));
+      }
+    };
+    void import("@/game/createGame").then(({ createGame }) => {
+      if (cancelled || !host.current) return;
+      handle = createGame(host.current, onEvent);
+      game.current = handle;
     });
-  };
+    return () => {
+      cancelled = true;
+      handle?.destroy();
+      game.current = null;
+    };
+  }, []);
 
-  // pre-render the card once the village is complete so "share" can call
-  // navigator.share inside the click's user activation (iOS needs that)
-  const showCompleteUi = phase === "complete" && celebration === 0;
   useEffect(() => {
-    if (!showCompleteUi || postcard.current || !village) return;
-    postcard.current = renderPostcard(village.deliveries);
-    postcard.current.catch(() => (postcard.current = null));
-  }, [showCompleteUi, village]);
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), toast.items ? 4200 : 3400);
+    return () => window.clearTimeout(t);
+  }, [toast]);
 
-  const getCard = () => (postcard.current ??= renderPostcard(deliveries));
+  useEffect(() => () => void (photo && URL.revokeObjectURL(photo.url)), [photo]);
 
-  const saveCard = async () => {
-    setBusy(true);
-    setStatus(COPY.complete.saving);
+  const started = village?.started ?? false;
+  const deliveries = village?.deliveries ?? [];
+  const sack = village?.sack ?? [];
+  const complete = village ? isComplete(village) : false;
+  const playing = ready && started && !intro;
+
+  const hint = !playing
+    ? ""
+    : !moved && !village?.pos
+      ? COPY.hint.move
+      : complete
+        ? COPY.hint.explore
+        : sack.length
+          ? COPY.hint.deliver
+          : deliveries.length
+            ? COPY.hint.reload
+            : COPY.hint.load;
+
+  const takePhoto = async () => {
+    if (!game.current || photoState !== "idle") return;
+    setPhotoState("flash");
+    setPhotoStatus("");
     try {
-      downloadBlob(await getCard());
-      setStatus(COPY.complete.saved);
+      const { image, chill } = await game.current.capture();
+      setPhotoState("making");
+      const blob = await composePostcard(image, chill, deliveries);
+      setPhoto({ url: URL.createObjectURL(blob), blob });
+      photoRef.current?.showModal();
     } catch {
-      postcard.current = null;
-      setStatus(COPY.complete.failed);
+      setAnnouncement(COPY.photo.failed);
+      setToast({ id: Date.now(), title: COPY.photo.failed });
     } finally {
-      setBusy(false);
+      setPhotoState("idle");
     }
   };
 
-  const shareCard = async () => {
-    setBusy(true);
+  const savePhoto = () => {
+    if (!photo) return;
+    downloadBlob(photo.blob);
+    setPhotoStatus(COPY.photo.saved);
+  };
+
+  const sharePhoto = async () => {
+    if (!photo) return;
     try {
-      const result = await sharePostcard(await getCard());
-      setStatus(
-        result === "shared"
-          ? COPY.complete.shared
-          : result === "fallback"
-            ? COPY.complete.fallback
-            : "",
+      const r = await sharePostcard(photo.blob);
+      setPhotoStatus(
+        r === "shared" ? COPY.photo.shared : r === "fallback" ? COPY.photo.fallback : "",
       );
     } catch {
-      postcard.current = null;
-      setStatus(COPY.complete.failed);
-    } finally {
-      setBusy(false);
+      setPhotoStatus(COPY.photo.failed);
     }
   };
 
   const reset = () => {
     dispatch({ type: "reset" });
-    postcard.current = null;
-    setSelected(null);
-    setSparkle(null);
-    setCelebration(0);
-    setStatus("");
-    setAnnouncement("");
+    setToast(null);
   };
 
-  const askRestart = () => {
-    const unfinished =
-      village && !complete && (village.deliveries.length > 0 || village.currentGift);
-    if (unfinished) dialogRef.current?.showModal();
-    else reset();
-  };
-
-  const treeLit = complete && celebration !== 1;
-  const wraps = deliveries.map((d) => d.wrapId);
-  const chill = phase === "landing" ? 0.42 : 0.34 * (1 - deliveries.length / TOTAL);
+  const go = (d: Destination) => game.current?.goTo(d);
 
   return (
-    <main className="stage">
-      <VillageScene
-        deliveries={deliveries}
-        treeLit={treeLit}
-        selectable={phase === "selecting" && !flight}
-        selected={selected}
-        onSelect={setSelected}
-        sparkle={sparkle}
-        celebrate={celebration === 2}
+    <main className="fixed inset-0 overflow-hidden bg-night">
+      <div
+        ref={host}
+        className="game-host"
+        role="application"
+        aria-label={`${COPY.meta.title}. ${COPY.hint.move}. ${COPY.hint.moveKeys}.`}
+        tabIndex={0}
       />
-      <div className="chill" style={{ opacity: chill }} />
-      <Snowfall burst={celebration === 2} />
-      {/* hides the swap from server snapshot to stored progress */}
-      <div className="veil pointer-events-none absolute inset-0 z-50 bg-night" aria-hidden />
 
-      {village && phase === "landing" && (
-        <section className="absolute inset-x-0 top-0 bottom-0 z-20 flex flex-col items-center justify-between px-6 pt-[calc(env(safe-area-inset-top)+6vh)] pb-[calc(env(safe-area-inset-bottom)+40px)] text-center">
+      {/* loading veil until Phaser has drawn the first frame */}
+      {!ready && (
+        <div className="absolute inset-0 z-40 grid place-items-center bg-night">
+          <p className="ui-shadow animate-pulse text-sm text-ivory/80">{COPY.loading}</p>
+        </div>
+      )}
+
+      {village && !started && (
+        <section className="absolute inset-0 z-30 flex flex-col items-center justify-between bg-[linear-gradient(to_bottom,rgb(10_16_29/0.55),transparent_40%,transparent_60%,rgb(10_16_29/0.7))] px-6 pt-[calc(env(safe-area-inset-top)+8vh)] pb-[calc(env(safe-area-inset-bottom)+44px)] text-center">
           <div className="fade-in">
-            <h1 className="ui-shadow text-[clamp(1.5rem,6.4vw,2.75rem)] leading-tight font-bold text-ivory">
+            <h1 className="ui-shadow text-[clamp(1.6rem,6.6vw,2.9rem)] leading-tight font-bold text-ivory">
               {COPY.landing.titleLines[0]} <br className="sm:hidden" />
               {COPY.landing.titleLines[1]}
             </h1>
@@ -224,6 +188,7 @@ export function ChristmasVillage() {
           <button
             type="button"
             className="pixel-btn fade-in w-full max-w-xs text-lg"
+            disabled={!ready}
             autoFocus
             onClick={() => dispatch({ type: "start" })}
           >
@@ -232,152 +197,208 @@ export function ChristmasVillage() {
         </section>
       )}
 
-      {village && phase !== "landing" && (
+      {intro && (
+        <button
+          type="button"
+          className="pixel-btn absolute right-4 bottom-[calc(env(safe-area-inset-bottom)+20px)] z-30"
+          data-variant="ghost"
+          data-size="sm"
+          onClick={() => game.current?.skipIntro()}
+        >
+          {COPY.intro.skip}
+        </button>
+      )}
+
+      {playing && village && (
         <>
-          <header className="absolute inset-x-0 top-0 z-20 px-4 pt-[calc(env(safe-area-inset-top)+14px)] text-center">
-            <div className="mx-auto max-w-md px-12">
-              <h1 className="ui-shadow text-lg leading-snug font-bold text-ivory sm:text-xl">
-                {phase === "complete"
-                  ? COPY.complete.title
-                  : phase === "selecting"
-                    ? COPY.selecting.title
-                    : COPY.village.title}
-              </h1>
-              {phase === "complete" ? (
-                <p className="ui-shadow fade-in mt-1.5 text-sm leading-relaxed text-ivory/85">
-                  {COPY.complete.description}
-                </p>
-              ) : (
-                <div className="mt-2">
-                  <Progress count={deliveries.length} wraps={wraps} />
+          <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 px-3 pt-[calc(env(safe-area-inset-top)+10px)]">
+            <div className="plate pointer-events-auto flex items-center gap-2.5 px-3 py-2">
+              <div
+                className="flex items-center gap-1.5"
+                role="img"
+                aria-label={COPY.hud.progressLabel(deliveries.length, TOTAL)}
+              >
+                <Icon rel="gifts/box-crimson.png" size={22} />
+                <span className="font-pixel text-base leading-none text-ivory">
+                  {deliveries.length}
+                  <span className="text-ivory/50">/{TOTAL}</span>
+                </span>
+              </div>
+              <div
+                className="flex gap-1"
+                role="img"
+                aria-label={
+                  sack.length
+                    ? COPY.hud.sackLabel(sack.map((g) => GIFTS[g.giftId].name))
+                    : COPY.hud.sackEmpty
+                }
+              >
+                {Array.from({ length: SACK_SIZE }, (_, i) => (
+                  <span key={i} className="slot">
+                    {sack[i] && <Icon rel={`gifts/item-${sack[i].giftId}.png`} size={24} />}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="pointer-events-auto flex gap-2">
+              <button
+                type="button"
+                className={`pixel-btn ${complete ? "pulse" : ""}`}
+                data-variant={complete ? undefined : "ghost"}
+                data-size="sm"
+                onClick={takePhoto}
+                disabled={busy || photoState !== "idle"}
+              >
+                <Icon rel="effects/sparkle-large.png" size={18} />
+                {COPY.hud.photo}
+              </button>
+              <button
+                type="button"
+                className="pixel-btn"
+                data-variant="ghost"
+                data-size="sm"
+                onClick={() =>
+                  deliveries.length || sack.length ? restartRef.current?.showModal() : reset()
+                }
+                disabled={busy}
+              >
+                {COPY.hud.menu}
+              </button>
+            </div>
+          </header>
+
+          {/* keyboard / screen-reader shortcut list: hidden until focused */}
+          <nav
+            aria-label={COPY.hud.goTo}
+            className="sr-only z-30 focus-within:not-sr-only focus-within:absolute focus-within:top-20 focus-within:left-3 focus-within:max-h-[70dvh] focus-within:overflow-auto"
+          >
+            <ul className="plate flex flex-col gap-1 p-3">
+              {(["sleigh", "tree", ...BUILDING_IDS] as const).map((d) => {
+                const name =
+                  d === "sleigh"
+                    ? COPY.hud.sleigh
+                    : d === "tree"
+                      ? COPY.toast.tree
+                      : BUILDING_NAMES[d];
+                return (
+                  <li key={d}>
+                    <button
+                      type="button"
+                      className="w-full px-2 py-1.5 text-left text-sm text-ivory hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-glow"
+                      onClick={() => go(d)}
+                      disabled={busy}
+                    >
+                      {COPY.hud.goToLabel(name)}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+
+          {toast && (
+            <div
+              key={toast.id}
+              className="toast-in pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top)+72px)] z-20 flex justify-center px-4"
+              aria-hidden
+            >
+              <div className="plate flex max-w-sm items-center gap-3 px-4 py-3">
+                {toast.items && (
+                  <div className="flex shrink-0 gap-1">
+                    {toast.items.map((g) => (
+                      <Icon key={g} rel={`gifts/item-${g}.png`} size={36} />
+                    ))}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-glow">{toast.title}</p>
+                  {toast.body && (
+                    <p className="mt-0.5 text-xs leading-relaxed text-ivory/85">{toast.body}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {(hint || near) && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+18px)] z-20 flex flex-col items-center gap-2 px-4">
+              {near && <p className="plate px-3 py-1.5 font-pixel text-xs text-glow">{near}</p>}
+              {hint && (
+                <div
+                  className="plate fade-in flex flex-col items-center px-4 py-2 text-center"
+                  key={hint}
+                >
+                  <p className="flex items-center gap-2 text-sm text-ivory/90">
+                    {hint === COPY.hint.move && (
+                      <span
+                        className="tap-hint inline-block size-3 rounded-full border-2 border-glow"
+                        aria-hidden
+                      />
+                    )}
+                    {hint}
+                  </p>
+                  {hint === COPY.hint.move && (
+                    <p className="mt-0.5 hidden text-xs text-ivory/60 pointer-fine:block">
+                      {COPY.hint.moveKeys}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
-            {phase !== "complete" && (
-              <button
-                type="button"
-                onClick={askRestart}
-                className="ui-shadow absolute top-[calc(env(safe-area-inset-top)+10px)] right-3 min-h-11 px-2 text-xs text-ivory/70 underline-offset-4 hover:text-ivory hover:underline focus-visible:outline-2 focus-visible:outline-ivory"
-              >
-                {COPY.village.restart}
-              </button>
-            )}
-          </header>
-
-          <footer className="absolute inset-x-0 bottom-0 z-20 flex justify-center px-4 pb-[calc(env(safe-area-inset-bottom)+16px)]">
-            {phase === "village" && (
-              <div className="plate fade-in flex w-full max-w-sm flex-col items-center gap-3 px-5 py-4 text-center">
-                <p className="text-sm text-ivory/85">{COPY.village.taskOpen}</p>
-                <button
-                  type="button"
-                  className="pixel-btn w-full"
-                  onClick={() =>
-                    dispatch({ type: "drawGift", random: Math.random(), wrapRandom: Math.random() })
-                  }
-                >
-                  {COPY.village.open}
-                </button>
-              </div>
-            )}
-
-            {phase === "selecting" && village.currentGift && (
-              <div className="plate fade-in flex w-full max-w-sm items-center gap-4 px-4 py-4">
-                <div ref={chipRef} className="relative size-14 shrink-0" aria-hidden>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={asset(`gifts/item-${village.currentGift.giftId}.png`)}
-                    alt=""
-                    className={`pixel size-14 ${flight ? "opacity-30" : ""}`}
-                  />
-                </div>
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <p className="truncate text-sm text-ivory/85">
-                    <span className="font-bold text-glow">
-                      {GIFTS[village.currentGift.giftId].name}
-                    </span>
-                    {" · "}
-                    {selected ? HOUSE_NAMES[selected] : COPY.selecting.hint}
-                  </p>
-                  <button
-                    type="button"
-                    className="pixel-btn w-full"
-                    disabled={!selected || Boolean(flight)}
-                    onClick={confirmDelivery}
-                  >
-                    {COPY.selecting.confirm}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {showCompleteUi && (
-              <div className="fade-in flex w-full max-w-sm flex-col gap-2.5">
-                <button
-                  type="button"
-                  className="pixel-btn w-full"
-                  onClick={saveCard}
-                  disabled={busy}
-                >
-                  {COPY.complete.save}
-                </button>
-                <div className="flex gap-2.5">
-                  <button
-                    type="button"
-                    className="pixel-btn flex-1"
-                    data-variant="red"
-                    onClick={shareCard}
-                    disabled={busy}
-                  >
-                    {COPY.complete.share}
-                  </button>
-                  <button
-                    type="button"
-                    className="pixel-btn flex-1"
-                    data-variant="ghost"
-                    onClick={reset}
-                  >
-                    {COPY.complete.again}
-                  </button>
-                </div>
-              </div>
-            )}
-          </footer>
-
-          {phase === "opening" && village.currentGift && (
-            <GiftOpening
-              gift={village.currentGift}
-              onOpen={() => dispatch({ type: "openGift" })}
-              onContinue={() => dispatch({ type: "chooseHouse" })}
-            />
           )}
         </>
       )}
 
-      {flight && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          ref={flightRef}
-          src={asset(`gifts/box-${flight.wrap}-small.png`)}
-          alt=""
-          className="pixel pointer-events-none fixed top-0 left-0 z-30 opacity-0"
-          style={{ width: 11 * flight.unit, height: 10 * flight.unit }}
-        />
+      {photoState === "flash" && (
+        <div className="shutter pointer-events-none absolute inset-0 z-40 bg-ivory" />
       )}
 
       <p className="sr-only" role="status" aria-live="polite">
-        {status || announcement}
+        {announcement}
       </p>
-      {status && showCompleteUi && (
-        <p
-          className="ui-shadow fade-in pointer-events-none absolute inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+132px)] z-20 text-center text-xs text-ivory"
-          aria-hidden
-        >
-          {status}
-        </p>
-      )}
 
       <dialog
-        ref={dialogRef}
+        ref={photoRef}
+        className="plate m-auto w-[min(24rem,calc(100vw-1.5rem))] p-4 text-center text-ivory backdrop:bg-[rgb(10_16_29/0.75)]"
+        aria-labelledby="photo-title"
+        onClose={() => setPhotoStatus("")}
+      >
+        <h2 id="photo-title" className="text-base font-bold">
+          {COPY.photo.title}
+        </h2>
+        {photo && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={photo.url}
+            alt={COPY.postcard.message}
+            className="mx-auto mt-3 aspect-[9/16] max-h-[58dvh] w-auto"
+          />
+        )}
+        <p className="mt-2 min-h-5 text-xs text-ivory/80" aria-live="polite">
+          {photoStatus}
+        </p>
+        <div className="mt-2 flex gap-2">
+          <button type="button" className="pixel-btn flex-1" onClick={savePhoto}>
+            {COPY.photo.save}
+          </button>
+          <button
+            type="button"
+            className="pixel-btn flex-1"
+            data-variant="red"
+            onClick={sharePhoto}
+          >
+            {COPY.photo.share}
+          </button>
+        </div>
+        <form method="dialog" className="mt-2">
+          <button type="submit" className="pixel-btn w-full" data-variant="ghost">
+            {COPY.photo.close}
+          </button>
+        </form>
+      </dialog>
+
+      <dialog
+        ref={restartRef}
         className="plate m-auto w-[min(22rem,calc(100vw-2rem))] p-6 text-center text-ivory backdrop:bg-[rgb(10_16_29/0.7)]"
         aria-labelledby="restart-title"
       >

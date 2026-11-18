@@ -32,42 +32,22 @@ body {
   word-break: keep-all; /* break Korean between words, not syllables */
 }
 
-/* ------------------------------------------------------------------ scene
-   --px is the size of one art pixel. It is derived purely in CSS so the server
-   HTML is already laid out correctly (no hydration shift):
-   fit the core width, keep the focus band (246 art px) between the UI bars,
-   and never show less than 400 art px of height. */
-.stage {
-  --stage-w: 100vw;
-  --stage-h: 100dvh;
-  --ui-top: calc(104px + env(safe-area-inset-top));
-  --ui-bottom: calc(150px + env(safe-area-inset-bottom));
-  --px: min(
-    var(--stage-w) / 256,
-    (var(--stage-h) - var(--ui-top) - var(--ui-bottom)) / 246,
-    var(--stage-h) / 400
-  );
+/* ------------------------------------------------------------------ game */
+.game-host {
   position: fixed;
   inset: 0;
   overflow: hidden;
-  background: #0a101d;
+  touch-action: none; /* taps move Santa; no page panning or zooming */
+  user-select: none;
+  -webkit-user-select: none;
 }
-
-@media (max-height: 560px) {
-  .stage {
-    --ui-top: calc(60px + env(safe-area-inset-top));
-    --ui-bottom: calc(92px + env(safe-area-inset-bottom));
-  }
+.game-host canvas {
+  display: block;
+  image-rendering: pixelated;
 }
-
-.core {
-  position: absolute;
-  isolation: isolate; /* keep sprite z-indexes inside the scene */
-  width: calc(var(--px) * 256);
-  height: calc(var(--px) * 384);
-  left: calc(50% - var(--px) * 128);
-  /* centre of the focus band (art y 219) sits midway between the UI bars */
-  top: calc((var(--ui-top) + var(--stage-h) - var(--ui-bottom)) / 2 - var(--px) * 219);
+.game-host:focus-visible {
+  outline: 3px solid var(--color-glow);
+  outline-offset: -3px;
 }
 
 .pixel {
@@ -75,208 +55,6 @@ body {
   user-select: none;
   -webkit-user-drag: none;
   max-width: none;
-}
-
-.tile {
-  position: absolute;
-  image-rendering: pixelated;
-  background-repeat: repeat-x;
-  pointer-events: none;
-}
-
-/* houses ----------------------------------------------------------------- */
-.house {
-  position: absolute;
-  padding: 0;
-  border: 0;
-  background: none;
-  cursor: default;
-  outline: none;
-}
-.house:enabled {
-  cursor: pointer;
-}
-.house:focus-visible,
-.house[aria-pressed="true"] {
-  filter: drop-shadow(var(--px) 0 0 #f4cf83) drop-shadow(calc(var(--px) * -1) 0 0 #f4cf83)
-    drop-shadow(0 var(--px) 0 #f4cf83) drop-shadow(0 calc(var(--px) * -1) 0 #f4cf83);
-}
-.house:enabled:hover:not([aria-pressed="true"]) {
-  filter: brightness(1.12);
-}
-
-.lit-layer {
-  opacity: 0;
-  transition: opacity 0.2s;
-  filter: drop-shadow(0 0 calc(var(--px) * 3) rgb(244 207 131 / 0.55));
-}
-.lit-layer[data-on="true"] {
-  opacity: 1;
-  animation: light-on 1.1s steps(1) both;
-}
-@keyframes light-on {
-  0% {
-    opacity: 0;
-  }
-  18% {
-    opacity: 0.7;
-  }
-  30% {
-    opacity: 0.2;
-  }
-  45% {
-    opacity: 0.9;
-  }
-  58% {
-    opacity: 0.5;
-  }
-  70%,
-  100% {
-    opacity: 1;
-  }
-}
-
-.decor-layer {
-  opacity: 0;
-}
-.decor-layer[data-on="true"] {
-  opacity: 1;
-  animation: decor-in 0.9s 0.6s steps(6) both;
-}
-@keyframes decor-in {
-  from {
-    opacity: 0;
-    clip-path: inset(0 0 100% 0);
-  }
-  to {
-    opacity: 1;
-    clip-path: inset(0 0 0 0);
-  }
-}
-
-.doorstep-gift {
-  animation: gift-drop 0.45s steps(5) both;
-}
-@keyframes gift-drop {
-  from {
-    transform: translateY(calc(var(--px) * -10));
-    opacity: 0;
-  }
-  to {
-    transform: none;
-    opacity: 1;
-  }
-}
-
-.smoke {
-  opacity: 0;
-  animation: smoke-rise 4.2s linear infinite;
-}
-@keyframes smoke-rise {
-  0% {
-    transform: translate(0, 0) scale(0.5);
-    opacity: 0;
-  }
-  12% {
-    opacity: 0.8;
-  }
-  100% {
-    transform: translate(calc(var(--px) * 7), calc(var(--px) * -24)) scale(1.5);
-    opacity: 0;
-  }
-}
-
-.marker {
-  animation: bob 1s steps(2) infinite;
-}
-@keyframes bob {
-  50% {
-    transform: translateY(calc(var(--px) * -2));
-  }
-}
-
-.sparkle {
-  opacity: 0;
-  animation: sparkle-pop 0.9s steps(6) both;
-}
-@keyframes sparkle-pop {
-  0% {
-    transform: scale(0.2);
-    opacity: 0;
-  }
-  35% {
-    transform: scale(1.15);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(0.6);
-    opacity: 0;
-  }
-}
-
-.twinkle {
-  animation: twinkle 3.2s steps(4) infinite;
-}
-@keyframes twinkle {
-  0%,
-  100% {
-    opacity: 0.15;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-/* tree + village lights -------------------------------------------------- */
-.glow {
-  position: absolute;
-  border-radius: 50%;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 1.4s ease-out;
-  background: radial-gradient(
-    closest-side,
-    rgb(244 207 131 / 0.42),
-    rgb(244 207 131 / 0.12) 60%,
-    transparent
-  );
-}
-.glow[data-on="true"] {
-  opacity: 1;
-}
-.tree-lit {
-  opacity: 0;
-  transition: opacity 1.6s steps(8);
-  filter: drop-shadow(0 0 calc(var(--px) * 2) rgb(255 217 138 / 0.7));
-}
-.tree-lit[data-on="true"] {
-  opacity: 1;
-}
-.star-glow[data-on="true"] {
-  animation: star-pulse 2.4s ease-in-out infinite;
-}
-@keyframes star-pulse {
-  0%,
-  100% {
-    transform: scale(0.85);
-    opacity: 0.75;
-  }
-  50% {
-    transform: scale(1.15);
-    opacity: 1;
-  }
-}
-.crossfade {
-  transition: opacity 0.9s steps(4);
-}
-
-.chill {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: #0a1226;
-  mix-blend-mode: multiply;
-  transition: opacity 1.6s ease;
 }
 
 /* UI --------------------------------------------------------------------- */
@@ -354,13 +132,19 @@ body {
     inset 0 0 0 2px rgb(247 241 229 / 0.55),
     inset 0 -4px 0 var(--edge);
 }
+.pixel-btn[data-size="sm"] {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 0.7rem 3px;
+  font-size: 0.8rem;
+}
 
-/* framed dialog plate, like an old game's text box */
+/* framed plate, like an old game's text box */
 .plate {
-  background: rgb(16 24 39 / 0.9);
+  background: rgb(16 24 39 / 0.86);
   box-shadow:
     inset 0 0 0 2px #0a101d,
-    inset 0 0 0 4px rgb(247 241 229 / 0.45);
+    inset 0 0 0 4px rgb(247 241 229 / 0.4);
   clip-path: polygon(
     0 6px,
     6px 6px,
@@ -377,6 +161,16 @@ body {
   );
 }
 
+/* sack slots in the HUD */
+.slot {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: rgb(10 16 29 / 0.55);
+  box-shadow: inset 0 0 0 2px rgb(247 241 229 / 0.22);
+}
+
 .fade-in {
   animation: fade-in 0.6s ease both;
 }
@@ -391,92 +185,46 @@ body {
   }
 }
 
-.veil {
-  animation: veil-out 1.2s ease 0.1s both;
+.toast-in {
+  animation: toast-in 0.35s steps(4) both;
 }
-@keyframes veil-out {
-  to {
+@keyframes toast-in {
+  from {
     opacity: 0;
-    visibility: hidden;
+    transform: translateY(-8px);
   }
 }
 
-/* gift opening ----------------------------------------------------------- */
-.gift-stage {
-  --g: 6px; /* one gift-sprite pixel */
+.pulse {
+  animation: pulse 1.6s ease-in-out infinite;
 }
-@media (max-width: 380px), (max-height: 640px) {
-  .gift-stage {
-    --g: 5px;
-  }
-}
-.box-idle {
-  animation: box-idle 2.4s steps(1) infinite;
-  transform-origin: 50% 100%;
-}
-@keyframes box-idle {
-  0%,
-  60%,
-  100% {
-    transform: none;
-  }
-  66% {
-    transform: rotate(-3deg);
-  }
-  72% {
-    transform: rotate(3deg);
-  }
-  78% {
-    transform: rotate(-2deg);
-  }
-  84% {
-    transform: rotate(1deg);
-  }
-}
-.lid-off {
-  animation: lid-off 0.7s cubic-bezier(0.2, 0.7, 0.3, 1) both;
-}
-@keyframes lid-off {
-  to {
-    transform: translate(calc(var(--g) * 10), calc(var(--g) * -26)) rotate(24deg);
-    opacity: 0;
-  }
-}
-.item-rise {
-  animation: item-rise 0.9s 0.25s cubic-bezier(0.2, 0.8, 0.3, 1.15) both;
-}
-@keyframes item-rise {
-  from {
-    transform: translateY(calc(var(--g) * 14)) scale(0.5);
-    opacity: 0;
-  }
-  to {
-    transform: none;
-    opacity: 1;
-  }
-}
-.item-float {
-  animation: item-float 3s ease-in-out infinite;
-}
-@keyframes item-float {
+@keyframes pulse {
   50% {
-    transform: translateY(calc(var(--g) * -1.5));
+    filter: brightness(1.18);
+    transform: translateY(-1px);
   }
 }
-.rays {
-  background: repeating-conic-gradient(
-    from 0deg,
-    rgb(244 207 131 / 0.22) 0deg 10deg,
-    transparent 10deg 30deg
-  );
-  mask-image: radial-gradient(closest-side, black, transparent);
-  animation:
-    rays 12s linear infinite,
-    fade-in 0.8s ease both;
+
+.tap-hint {
+  animation: tap 1.4s steps(2) infinite;
 }
-@keyframes rays {
+@keyframes tap {
+  50% {
+    transform: scale(0.85);
+    opacity: 0.6;
+  }
+}
+
+.shutter {
+  animation: shutter 0.5s ease-out both;
+}
+@keyframes shutter {
+  from {
+    opacity: 0.9;
+  }
   to {
-    rotate: 360deg;
+    opacity: 0;
+    visibility: hidden;
   }
 }
 
@@ -488,16 +236,5 @@ body {
     animation-iteration-count: 1 !important;
     animation-delay: 0ms !important;
     transition-duration: 1ms !important;
-  }
-  .smoke,
-  .twinkle,
-  .marker,
-  .rays,
-  .box-idle,
-  .item-float {
-    animation: none !important;
-  }
-  .smoke {
-    opacity: 0.5;
   }
 }
