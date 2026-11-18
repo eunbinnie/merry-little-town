@@ -62,7 +62,7 @@ pnpm assets:generate   # regenerate every sprite, the ground, the OG image and t
 - **Privacy.** Names and messages exist only in memory while the card is open. They are never stored or sent anywhere, and closing the card discards them.
 - **Sharing.**
   - The preview shows the exact PNG that is saved or shared.
-  - "Share" passes the file to `navigator.share` when `navigator.canShare` allows it. Cancelling the share sheet is a normal outcome, not an error.
+  - "Share" passes the file to `navigator.share` when `navigator.canShare` allows it, with a short line and the village link in `text` (not `url`, which iOS drops for many targets when files are attached). Cancelling the share sheet is a normal outcome, not an error.
   - Without file sharing, the sheet suggests saving the image or long-pressing it.
   - "마을 주소 복사" copies the public link as a separate action.
 

@@ -129,9 +129,11 @@ export function downloadBlob(blob: Blob, name = POSTCARD_FILENAME): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
+const siteUrl = () => window.location.origin + "/";
+
 export async function copyLink(): Promise<boolean> {
   try {
-    await navigator.clipboard.writeText(window.location.origin + "/");
+    await navigator.clipboard.writeText(siteUrl());
     return true;
   } catch {
     return false;
@@ -154,7 +156,13 @@ export async function shareImage(blob: Blob, name = POSTCARD_FILENAME): Promise<
   const file = new File([blob], name, { type: "image/png" });
   if (!navigator.canShare?.({ files: [file] })) return "unsupported";
   try {
-    await navigator.share({ files: [file], title: COPY.photo.shareTitle });
+    // The link rides in `text`: with files attached, iOS drops `url` for many
+    // targets, and Android Chrome would append it to the text anyway.
+    await navigator.share({
+      files: [file],
+      title: COPY.photo.shareTitle,
+      text: COPY.share.text(siteUrl()),
+    });
     return "shared";
   } catch (e) {
     return e instanceof DOMException && e.name === "AbortError" ? "cancelled" : "failed";

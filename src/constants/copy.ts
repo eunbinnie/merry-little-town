@@ -92,6 +92,7 @@ export const COPY = {
     alt: (to: string) => `${to}에게 보내는 크리스마스 카드`,
   },
   share: {
+    text: (url: string) => `작은 크리스마스가 도착했어요. 당신도 마을의 산타가 되어보세요.\n${url}`,
     shared: "공유를 마쳤어요.",
     saved: "이미지를 저장했어요. 메신저에서 보내주세요.",
     unsupported: "이 브라우저는 바로 공유할 수 없어요. 이미지를 저장해 메신저로 보내주세요.",
