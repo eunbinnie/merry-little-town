@@ -50,8 +50,10 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ko" className={`${gowun.variable} ${pixelify.variable}`}>
-      <body>{children}</body>
+    // In-app browsers (KakaoTalk etc.) inject attributes on <html>/<body> before hydration.
+    // suppressHydrationWarning only covers these two elements' own attributes, not children.
+    <html lang="ko" className={`${gowun.variable} ${pixelify.variable}`} suppressHydrationWarning>
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }
