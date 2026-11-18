@@ -1,17 +1,16 @@
-// Typed view over the generated sprite metadata (`pnpm assets:generate`).
+// Typed view of the metadata written by `pnpm assets:generate`.
 import data from "./sprites.json";
-import type { HouseId } from "@/features/village/game";
+import type { BuildingId, BuildingMeta } from "@/game/world";
 
-type XY = readonly [number, number];
+type Anims = Record<string, number[]>;
 
-export const SPRITE_SIZES = data.sizes as unknown as Readonly<Record<string, XY>>;
-
-export const HOUSE_META = data.houses as unknown as Readonly<
-  Record<HouseId, { w: number; h: number; top: number; door: XY; gift: XY; smoke: XY }>
->;
-
-export function spriteSize(rel: string): XY {
-  const size = SPRITE_SIZES[rel];
-  if (!size) throw new Error(`Unknown sprite: ${rel}`);
-  return size;
-}
+export const SPRITE_SIZES = data.sizes as unknown as Record<string, [number, number]>;
+export const BUILDING_META = data.buildings as unknown as Record<BuildingId, BuildingMeta>;
+export const SANTA_META = data.santa as { w: number; h: number; footY: number; anims: Anims };
+export const SLEIGH_META = data.sleigh as unknown as {
+  w: number;
+  h: number;
+  groundY: number;
+  nose: [number, number];
+  anims: Anims;
+};
