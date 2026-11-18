@@ -1,6 +1,6 @@
 # christmas-village
 
-크리스마스가 도착하는 마을: a small explorable Christmas Eve village where you play as Santa. Rudolph lands the sleigh by the gift workshop. You walk the snowy streets, load wrapped presents from the sleigh and place them on doorsteps. Every gift lights up another house, and each delivery can become a handwritten Christmas card for a real person. You write "To." and a message, Santa slips away from the doorstep, and you get a 9:16 postcard of that house to send. After the last gift the big tree on the plaza glows, and the village stays open to wander. With sound on, a music box plays "Silent Night" over the snow, and every footstep, bell and lit window has its own small sound.
+크리스마스가 도착하는 마을: a small explorable Christmas Eve village where you play as Santa. Rudolph lands the sleigh by the gift workshop. You walk the snowy streets, load wrapped presents from the sleigh and place them on doorsteps. Every gift lights up another house, and each delivery can become a handwritten Christmas card for a real person. You write "To." and a message, Santa slips away from the doorstep, and you get a 9:16 postcard of that house to send. After the last gift the big tree on the plaza glows, and the village stays open to wander. With sound on, a little village band plays a cheerful Jingle Bells theme, and every footstep, bell and lit window has its own small sound.
 
 Everything runs in the browser. There is no backend, database or login, and progress is kept in LocalStorage.
 
@@ -44,23 +44,31 @@ pnpm assets:generate   # regenerate every sprite, the ground, the OG image and t
 
 ### Sound
 
-Everything you hear is synthesised in the browser by `src/audio/synth.ts`. There are no audio files, no audio services and no network requests. Each sound is rendered once into a buffer with an `OfflineAudioContext` (off the main thread, about 4 s in total), and afterwards only played back.
+Everything you hear is synthesised in the browser (`src/audio/`). There are no audio files, no audio services and no network requests. Each sound is rendered once into a buffer and afterwards only played back. On a laptop the whole set takes about 4 s, and the page never pauses for more than 0.1 s.
 
-- **Music.** An original music-box arrangement of "Silent Night", about 60 s, looping seamlessly. Each tine is a detuned pair with soft upper partials, a short inharmonic "ping" and a dark reverb.
+- **The band** (`instruments.ts`).
+  - Instruments: soft marimba, celesta, glockenspiel, flute, pizzicato strings, sustained strings, a round bass, sleigh bells and a woodblock.
+  - Each has its own partials, envelope, filtering and articulation, with slightly humanised timing and dynamics.
+  - Each distinct note is played once in an `OfflineAudioContext`, then copied onto the timeline with pan and velocity. One short, bright room and a soft compressor go over the mix. This keeps a 700-note arrangement cheap enough for a phone.
+- **Music** (`music.ts`). A cheerful village theme in G major at 116 BPM: 32 bars, about 66 s, looping without a seam.
+  - A, "welcome to the village": an original bouncy tune on marimba, with pizzicato off-beats and light bells.
+  - B, Jingle Bells: first on marimba with a flute counter-line, then on flute and celesta over bouncing marimba eighths. Little celesta runs fill the long notes.
+  - C, "a little Christmas magic": an original flute tune with celesta answers. It turns on D7 back into A.
 - **Effects.**
   - Footsteps: four snow-crunch variants (lighter on the cobbles) and two for the bridge planks, with pitch and level varied slightly. They play every other footprint and never while Santa stands, flies or waits by a card.
   - Sleigh bells: a loop that follows the team's speed and fades as the team lands or leaves the screen.
-  - Gifts: a paper rustle and a small chime at the sleigh. A soft thud when the present touches the snow (or settles in the chimney).
-  - Lit windows: a rising music-box chime that climbs a little as more of the village lights up.
-  - Cards: a paper rustle when the card opens and a short music-box phrase when the postcard is ready. The music steps back while a card is open.
-  - Finale: the opening line of "Joy to the World" when the tree lights up.
-- **Ambience.** A slow, soft winter wind, and now and then the far-off chapel bell.
+  - Gifts: a paper rustle, then a quick rising sparkle with a jingle at the sleigh. A soft thud when the present touches the snow (or settles in the chimney).
+  - Lit windows: a celesta arpeggio over a string swell, in three voicings that climb as more of the village lights up.
+  - Cards: a paper rustle when the card opens, and a warm little marimba-and-flute cadence when the postcard is ready. The music steps back while a card is open.
+  - Finale: "We Wish You a Merry Christmas" for the whole band when the tree lights up.
+- **Ambience.** A very quiet breath of winter air under the music, kept clear of low rumble, and now and then a few soft, bright chimes.
 
-| Melody               | Source                                 | Status        |
-| -------------------- | -------------------------------------- | ------------- |
-| Silent Night         | Franz Xaver Gruber, 1818               | Public domain |
-| Joy to the World     | Lowell Mason, 1839 (opening line)      | Public domain |
-| Arrangements, sounds | Written for this project in `synth.ts` | Original      |
+| Melody                        | Source                                   | Status        |
+| ----------------------------- | ---------------------------------------- | ------------- |
+| Jingle Bells                  | James Lord Pierpont, 1857                | Public domain |
+| We Wish You a Merry Christmas | Traditional English                      | Public domain |
+| Village tunes A and C         | Written for this project (`music.ts`)    | Original      |
+| Arrangements, instruments     | `instruments.ts`, `music.ts`, `synth.ts` | Original      |
 
 **Controls and browsers.**
 
@@ -130,7 +138,7 @@ src/
     VillageScene.ts         world building, input, camera, sequences (intro, pickup, deliveries, finale)
     Santa.ts, Sleigh.ts     character controllers (sleigh = ground point + altitude + shadow)
     capture.ts              1:1 offscreen render of a world rectangle for the photo
-  audio/                    synth.ts (every sound, rendered offline), sound.ts (the one AudioContext)
+  audio/                    instruments.ts (the band), music.ts (scores), synth.ts (foley + bank), sound.ts
   components/christmas/     React overlay: landing, HUD, sound menu, toasts, hints, photo sheet
   features/village/         game.ts (pure reducer + save validation), store.ts (shared store)
   components/card/          card editor (paper note) and postcard preview sheet
