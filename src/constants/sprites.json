@@ -1,0 +1,360 @@
+{
+  "sizes": {
+    "backgrounds/sky.png": [
+      4,
+      176
+    ],
+    "backgrounds/stars.png": [
+      256,
+      150
+    ],
+    "backgrounds/mountains.png": [
+      512,
+      76
+    ],
+    "backgrounds/forest.png": [
+      256,
+      46
+    ],
+    "backgrounds/ground.png": [
+      256,
+      236
+    ],
+    "backgrounds/moon.png": [
+      40,
+      40
+    ],
+    "backgrounds/foreground.png": [
+      256,
+      40
+    ],
+    "houses/red-cottage-base.png": [
+      76,
+      66
+    ],
+    "houses/red-cottage-lit.png": [
+      76,
+      66
+    ],
+    "houses/red-cottage-decor.png": [
+      76,
+      66
+    ],
+    "houses/woodland-cabin-base.png": [
+      80,
+      66
+    ],
+    "houses/woodland-cabin-lit.png": [
+      80,
+      66
+    ],
+    "houses/woodland-cabin-decor.png": [
+      80,
+      66
+    ],
+    "houses/townhouse-base.png": [
+      62,
+      108
+    ],
+    "houses/townhouse-lit.png": [
+      62,
+      108
+    ],
+    "houses/townhouse-decor.png": [
+      62,
+      108
+    ],
+    "houses/bakery-base.png": [
+      86,
+      72
+    ],
+    "houses/bakery-lit.png": [
+      86,
+      72
+    ],
+    "houses/bakery-decor.png": [
+      86,
+      72
+    ],
+    "houses/stone-cottage-base.png": [
+      84,
+      62
+    ],
+    "houses/stone-cottage-lit.png": [
+      84,
+      62
+    ],
+    "houses/stone-cottage-decor.png": [
+      84,
+      62
+    ],
+    "backgrounds/village-paths.png": [
+      256,
+      384
+    ],
+    "trees/christmas-tree.png": [
+      66,
+      104
+    ],
+    "trees/christmas-tree-lit.png": [
+      66,
+      104
+    ],
+    "trees/gift-pile.png": [
+      34,
+      13
+    ],
+    "decorations/pine-large.png": [
+      30,
+      50
+    ],
+    "decorations/pine-small.png": [
+      20,
+      32
+    ],
+    "decorations/pine-tiny.png": [
+      12,
+      20
+    ],
+    "decorations/lamppost.png": [
+      9,
+      30
+    ],
+    "decorations/lamppost-lit.png": [
+      9,
+      30
+    ],
+    "decorations/lantern.png": [
+      7,
+      11
+    ],
+    "decorations/lantern-lit.png": [
+      7,
+      11
+    ],
+    "decorations/wreath.png": [
+      13,
+      14
+    ],
+    "decorations/snowman.png": [
+      18,
+      24
+    ],
+    "decorations/candy-cane.png": [
+      6,
+      14
+    ],
+    "decorations/fence.png": [
+      34,
+      11
+    ],
+    "decorations/garland.png": [
+      34,
+      8
+    ],
+    "decorations/string-lights.png": [
+      34,
+      8
+    ],
+    "decorations/candle.png": [
+      5,
+      8
+    ],
+    "effects/snowflake.png": [
+      7,
+      7
+    ],
+    "effects/sparkle.png": [
+      5,
+      5
+    ],
+    "effects/sparkle-large.png": [
+      9,
+      9
+    ],
+    "effects/twinkle.png": [
+      5,
+      5
+    ],
+    "effects/smoke.png": [
+      8,
+      6
+    ],
+    "effects/marker.png": [
+      9,
+      7
+    ],
+    "gifts/box-crimson-body.png": [
+      40,
+      40
+    ],
+    "gifts/box-crimson-lid.png": [
+      40,
+      40
+    ],
+    "gifts/box-crimson-small.png": [
+      11,
+      10
+    ],
+    "gifts/box-pine-body.png": [
+      40,
+      40
+    ],
+    "gifts/box-pine-lid.png": [
+      40,
+      40
+    ],
+    "gifts/box-pine-small.png": [
+      11,
+      10
+    ],
+    "gifts/box-ivory-body.png": [
+      40,
+      40
+    ],
+    "gifts/box-ivory-lid.png": [
+      40,
+      40
+    ],
+    "gifts/box-ivory-small.png": [
+      11,
+      10
+    ],
+    "gifts/box-midnight-body.png": [
+      40,
+      40
+    ],
+    "gifts/box-midnight-lid.png": [
+      40,
+      40
+    ],
+    "gifts/box-midnight-small.png": [
+      11,
+      10
+    ],
+    "gifts/item-teddy-bear.png": [
+      24,
+      24
+    ],
+    "gifts/item-gingerbread.png": [
+      24,
+      24
+    ],
+    "gifts/item-stocking.png": [
+      24,
+      24
+    ],
+    "gifts/item-snow-globe.png": [
+      24,
+      24
+    ],
+    "gifts/item-scarf.png": [
+      24,
+      24
+    ],
+    "gifts/item-candy-cane.png": [
+      24,
+      24
+    ],
+    "gifts/item-mini-tree.png": [
+      24,
+      24
+    ],
+    "gifts/item-golden-star.png": [
+      24,
+      24
+    ]
+  },
+  "houses": {
+    "red-cottage": {
+      "w": 76,
+      "h": 66,
+      "top": 10,
+      "door": [
+        36,
+        62
+      ],
+      "gift": [
+        48,
+        64
+      ],
+      "smoke": [
+        55,
+        2
+      ]
+    },
+    "woodland-cabin": {
+      "w": 80,
+      "h": 66,
+      "top": 0,
+      "door": [
+        38,
+        62
+      ],
+      "gift": [
+        29,
+        60
+      ],
+      "smoke": [
+        70,
+        8
+      ]
+    },
+    "townhouse": {
+      "w": 62,
+      "h": 108,
+      "top": 3,
+      "door": [
+        31,
+        104
+      ],
+      "gift": [
+        46,
+        106
+      ],
+      "smoke": [
+        47,
+        6
+      ]
+    },
+    "bakery": {
+      "w": 86,
+      "h": 72,
+      "top": 8,
+      "door": [
+        47,
+        67
+      ],
+      "gift": [
+        60,
+        70
+      ],
+      "smoke": [
+        18,
+        1
+      ]
+    },
+    "stone-cottage": {
+      "w": 84,
+      "h": 62,
+      "top": 7,
+      "door": [
+        37,
+        58
+      ],
+      "gift": [
+        26,
+        59
+      ],
+      "smoke": [
+        53,
+        1
+      ]
+    }
+  },
+  "plaza": {
+    "cx": 128,
+    "cy": 227,
+    "rx": 40
+  }
+}
