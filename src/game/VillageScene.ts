@@ -33,8 +33,13 @@ import {
   TREE,
   WORLD,
   POSTCARD,
+  BULB_COLORS,
+  LANTERN_FLAME,
+  STRANDS,
   doorStand,
+  isWater,
   obstacles,
+  paintStrand,
   postcardFrame,
   sizesOf,
   worldProps,
@@ -42,19 +47,54 @@ import {
   type LampGroup,
   type Pt,
   type Rect,
+  type Strand,
 } from "./world";
 import { Grid } from "./grid";
 import { Santa, createSantaAnims } from "./Santa";
 import { Sleigh, createSleighAnims } from "./Sleigh";
 import { UI_FLAG, snapshotRegion } from "./capture";
 import type { Destination, GameEvent } from "./types";
+import { duckMusic, playSound, setBells } from "@/audio/sound";
 
 type Img = Phaser.GameObjects.Image;
 type Target = { kind: "building"; id: BuildingId } | { kind: "sleigh" } | { kind: "tree" };
-type House = { lit: Img; decor: Img; glow: Img; marker: Img | null; gift: Img | null };
+type House = {
+  lit: Img;
+  decor: Img;
+  glow: Img;
+  marker: Img | null;
+  gift: Img | null;
+  /** Fully lit and settled: the windows may flicker like candlelight. */
+  steady: boolean;
+};
 type Lamp = { lit: Img; glow: Img; pool: Img; group: LampGroup; step?: number; on: boolean };
+type Lights = {
+  s: Strand;
+  bulbs: Img[];
+  glows: Img[];
+  phase: number[];
+  speed: number[];
+  box: Phaser.Geom.Rectangle;
+  /** 0 → 1 as the bulbs come on one after another along the wire. */
+  level: number;
+  on: boolean;
+};
 
 const ADD = Phaser.BlendModes.ADD;
+const tint = (hex: string) => parseInt(hex.slice(1), 16);
+
+/** Nudges particles sideways with the scene's current wind. */
+class Wind extends Phaser.GameObjects.Particles.ParticleProcessor {
+  constructor(
+    private readonly gust: () => number,
+    private readonly depth: number,
+  ) {
+    super(0, 0, true);
+  }
+  update(p: Phaser.GameObjects.Particles.Particle, _delta: number, step: number): void {
+    p.x += this.gust() * this.depth * step;
+  }
+}
 const TREE_STAND: Pt = [TREE.x + 33, TREE.y + TREE.block[1] + TREE.block[3] + 8];
 const NEIGHBOURS: BuildingId[] = ["chapel", "blue-cottage", "rose-cottage"];
 const isHouse = (id: string): id is HouseId => (HOUSE_IDS as readonly string[]).includes(id);
@@ -96,6 +136,10 @@ export class VillageScene extends Phaser.Scene {
   private cardHouse: HouseId | null = null;
   private finaleDone = false;
   private sleighReturn: Promise<void> = Promise.resolve();
+  private bellsAt: Pt = [0, 0];
+  private festoons: Lights[] = [];
+  private flames: Img[] = [];
+  private wind = 0;
 
   constructor(private readonly emit: (e: GameEvent) => void) {
     super("village");
@@ -150,8 +194,18 @@ export class VillageScene extends Phaser.Scene {
         .setOrigin(0)
         .setDepth(p.y + k.h)
         .setFlipX(Boolean(p.flip));
+      if (p.kind === "lantern-post")
+        this.flames.push(
+          this.add
+            .image(p.x + LANTERN_FLAME[0], p.y + LANTERN_FLAME[1], "effects/glow-warm.png")
+            .setBlendMode(ADD)
+            .setDepth(9000)
+            .setScale(0.5)
+            .setAlpha(0.45),
+        );
     }
     this.buildLamps();
+    this.buildStrands();
     this.buildEffects();
 
     this.sleigh = new Sleigh(this, SLEIGH_PARK);
@@ -159,6 +213,11 @@ export class VillageScene extends Phaser.Scene {
     const start: Pt = pos && this.grid.walkable(pos[0], pos[1]) ? pos : SPAWN;
     this.santa = new Santa(this, this.grid, start);
     this.santa.setFull(this.state.sack.length > 0);
+    this.santa.onStep = (ground) =>
+      playSound(ground === "wood" ? "stepWood" : "step", {
+        rate: Phaser.Math.FloatBetween(0.9, 1.1) * (ground === "stone" ? 1.12 : 1),
+        gain: (ground === "stone" ? 0.7 : 1) * Phaser.Math.FloatBetween(0.8, 1),
+      });
 
     this.ring = this.ui(this.add.image(0, 0, "effects/tap.png").setDepth(-450).setVisible(false));
     this.arrow = this.ui(
@@ -315,7 +374,7 @@ export class VillageScene extends Phaser.Scene {
           ease: "Sine.easeInOut",
         });
       }
-      this.houses.set(id, { lit, decor, glow, marker, gift: null });
+      this.houses.set(id, { lit, decor, glow, marker, gift: null, steady: false });
     }
   }
 
@@ -376,31 +435,91 @@ export class VillageScene extends Phaser.Scene {
     }
   }
 
+  /** String lights and bunting: a pixel wire texture, plus a lit bulb and glow per bead. */
+  private buildStrands(): void {
+    STRANDS.forEach((s, i) => {
+      const px: Array<[number, number, string]> = [];
+      const beads = paintStrand(s, (x, y, c) => px.push([x, y, c]));
+      const xs = px.map((p) => p[0]);
+      const ys = px.map((p) => p[1]);
+      const [x0, y0] = [Math.min(...xs), Math.min(...ys)];
+      const key = `strand-${i}`;
+      if (!this.textures.exists(key)) {
+        const tex = this.textures.createCanvas(
+          key,
+          Math.max(...xs) - x0 + 1,
+          Math.max(...ys) - y0 + 1,
+        );
+        const ctx = tex!.getContext();
+        for (const [x, y, c] of px) {
+          ctx.fillStyle = c;
+          ctx.fillRect(x - x0, y - y0, 1, 1);
+        }
+        tex!.refresh();
+      }
+      const wire = this.add.image(x0, y0, key).setOrigin(0).setDepth(s.z);
+      if (s.kind !== "lights") return;
+      const color = (j: number) => tint(BULB_COLORS[j % BULB_COLORS.length]!);
+      this.festoons.push({
+        s,
+        bulbs: beads.map(([x, y], j) =>
+          this.add
+            .image(x + 0.5, y + 0.5, "effects/dot.png")
+            .setTint(color(j))
+            .setDepth(s.z + 0.01)
+            .setAlpha(0),
+        ),
+        glows: beads.map(([x, y], j) =>
+          this.add
+            .image(x + 0.5, y + 0.5, "effects/glow-warm.png")
+            .setTint(color(j))
+            .setBlendMode(ADD)
+            .setDepth(9000)
+            .setScale(0.16)
+            .setAlpha(0),
+        ),
+        phase: beads.map(() => Math.random() * Math.PI * 2),
+        speed: beads.map(() => 0.7 + Math.random() * 1.1),
+        box: wire.getBounds(),
+        level: 0,
+        on: false,
+      });
+    });
+  }
+
   private buildEffects(): void {
     const cam = this.cameras.main;
     const rx = () => cam.worldView.x - 8 + Math.random() * (cam.worldView.width + 16);
     const ry = () => cam.worldView.y - 8 + Math.random() * (cam.worldView.height + 16);
     const fade = (t: number) => Math.sin(t * Math.PI);
     const slow = this.reduced ? 0.25 : 1;
-    // far, small flakes and near, bigger ones drifting a little faster
-    for (const [tex, freq, speed, depth] of [
-      ["effects/dot.png", 36, 10, 9500],
-      ["effects/flake.png", 140, 17, 9501],
+    // three depths: fine far flakes, the usual ones, and now and then a big
+    // soft flake drifting close past the camera. The first two sit under the
+    // lamp glows, so snow falling through lamplight turns warm.
+    for (const [tex, freq, speed, depth, drift, life] of [
+      ["effects/dot.png", 36, 9, 8990, 0.6, 8500],
+      ["effects/flake.png", 140, 16, 8991, 1, 8000],
+      ["effects/flake-large.png", 1500, 30, 9502, 1.7, 4000],
     ] as const) {
-      this.snow.push(
-        this.add
-          .particles(0, 0, tex, {
-            x: { onEmit: rx },
-            y: { onEmit: ry },
-            lifespan: { min: 4500, max: 8000 },
-            speedY: { min: speed * 0.6 * slow, max: speed * slow },
-            speedX: { min: -3 * slow, max: 4 * slow },
-            alpha: { start: 0, end: 0.95, ease: fade },
-            frequency: this.reduced ? freq * 3 : freq,
-          })
-          .setDepth(depth),
-      );
+      const near = depth > 9000;
+      const e = this.add
+        .particles(0, 0, tex, {
+          x: { onEmit: rx },
+          y: { onEmit: ry },
+          lifespan: { min: life * 0.55, max: life },
+          speedY: { min: speed * 0.6 * slow, max: speed * slow },
+          speedX: { min: -3 * slow, max: 4 * slow },
+          alpha: { start: 0, end: near ? 0.8 : 0.95, ease: fade },
+          frequency: this.reduced ? freq * 3 : freq,
+        })
+        .setDepth(depth);
+      e.addParticleProcessor(new Wind(() => this.wind, drift * slow));
+      // the big near flakes belong to the moment, not to the postcard
+      if (near) this.ui(e);
+      this.snow.push(e);
     }
+    if (!this.reduced)
+      this.time.addEvent({ delay: 1300, loop: true, callback: () => this.glint() });
     this.sparkles = this.add
       .particles(0, 0, "effects/sparkle.png", {
         emitting: false,
@@ -435,7 +554,7 @@ export class VillageScene extends Phaser.Scene {
     this.refreshLamps(true);
   }
 
-  private lampWanted(l: Lamp): boolean {
+  private lampWanted(l: { group: LampGroup; step?: number }): boolean {
     const s = this.state;
     if (l.group === "always") return true;
     if (l.group === "plaza") return isComplete(s) || s.deliveries.length >= (l.step ?? 99);
@@ -465,14 +584,30 @@ export class VillageScene extends Phaser.Scene {
           delay: instant ? i * 90 : 1000,
         });
     });
+    // string lights come on with their lamps, bulb after bulb along the wire
+    for (const l of this.festoons) {
+      const on = this.lampWanted(l.s);
+      if (on === l.on) continue;
+      l.on = on;
+      this.tweens.killTweensOf(l);
+      if (instant || this.reduced) l.level = on ? 1 : 0;
+      else
+        this.tweens.add({
+          targets: l,
+          level: on ? 1 : 0,
+          duration: on ? 1600 : 300,
+          delay: on ? 700 : 0,
+        });
+    }
     const chill = this.chillFor(this.state);
     if (instant) this.chill.setAlpha(chill);
     else this.tweens.add({ targets: this.chill, alpha: chill, duration: 1500 });
   }
 
-  private lightHouse(id: BuildingId, instant: boolean): Promise<void> {
+  private lightHouse(id: BuildingId, instant: boolean, chime = true): Promise<void> {
     const h = this.houses.get(id)!;
     this.tweens.killTweensOf([h.lit, h.decor, h.glow]);
+    h.steady = instant;
     const flicker = () =>
       !this.reduced &&
       this.tweens.add({
@@ -491,7 +626,12 @@ export class VillageScene extends Phaser.Scene {
     }
     const b = BUILDINGS[id];
     const m = BUILDING_META[id];
-    this.tweens.add({ targets: h.lit, alpha: 1, duration: 700 });
+    this.tweens.add({
+      targets: h.lit,
+      alpha: 1,
+      duration: 700,
+      onComplete: () => void (h.steady = true),
+    });
     this.tweens.add({ targets: h.decor, alpha: 1, duration: 900, delay: 350 });
     h.glow.setAlpha(0);
     this.tweens.add({
@@ -502,6 +642,9 @@ export class VillageScene extends Phaser.Scene {
       onComplete: flicker,
     });
     if (!this.reduced) this.sparkles.explode(16, b.x + m.w / 2, b.y + m.h * 0.55);
+    // the chime climbs a little as more of the village lights up
+    const n = getVillage().deliveries.length;
+    if (chime) playSound("light", { variant: n <= 2 ? 0 : n <= 4 ? 1 : 2 });
     return this.wait(900);
   }
 
@@ -760,6 +903,7 @@ export class VillageScene extends Phaser.Scene {
     void flight.done.then(async () => {
       if (!this.intro) return;
       this.puffAt(SLEIGH_PARK[0], SLEIGH_PARK[1], 18);
+      playSound("place", { rate: 0.6, gain: 0.5 });
       await this.wait(500);
       this.finishIntro();
     });
@@ -842,6 +986,7 @@ export class VillageScene extends Phaser.Scene {
         }),
       ),
     );
+    playSound("rustle");
     await this.tween({
       targets: boxes,
       angle: { from: -12, to: 12 },
@@ -849,6 +994,7 @@ export class VillageScene extends Phaser.Scene {
       yoyo: true,
       repeat: 2,
     });
+    playSound("twinkle");
     const shown = added.map((g, i) => {
       const [x, y] = spots[i]!;
       boxes[i]!.destroy();
@@ -912,6 +1058,7 @@ export class VillageScene extends Phaser.Scene {
     await this.wait(340);
     santa.pose(1);
     this.placeGift(id, gift.wrapId, false);
+    playSound("place", { at: 0.09 }); // when the bounce first touches the snow
     this.puffAt(b.x + m.gift[0], b.y + m.gift[1], 5);
     await this.wait(300);
     santa.pose(2);
@@ -969,6 +1116,7 @@ export class VillageScene extends Phaser.Scene {
     });
     box.destroy();
     this.placeGift(id, gift.wrapId, false);
+    playSound("place", { rate: 0.7, gain: 0.8, at: 0.4 }); // settling down the chimney
     this.sparkles.explode(18, chimney[0], chimney[1]);
     const warm = this.add
       .image(chimney[0], chimney[1], "effects/glow-warm.png")
@@ -1021,7 +1169,10 @@ export class VillageScene extends Phaser.Scene {
     await this.sleighReturn;
     await this.pan(TREE.x + 33, TREE.y + 64, 1400);
     this.lightTree(false);
-    NEIGHBOURS.forEach((id) => void this.lightHouse(id, false));
+    duckMusic("finale", 0.15);
+    playSound("finale");
+    this.time.delayedCall(7600, () => duckMusic("finale", null));
+    NEIGHBOURS.forEach((id) => void this.lightHouse(id, false, false));
     this.refreshLamps(false);
     for (const s of this.snow) s.frequency = s.frequency / 2;
     if (!this.reduced) {
@@ -1150,6 +1301,7 @@ export class VillageScene extends Phaser.Scene {
   private resetWorld(): void {
     for (const [, h] of this.houses) {
       this.tweens.killTweensOf([h.lit, h.decor, h.glow]);
+      h.steady = false;
       h.lit.setAlpha(0);
       h.decor.setAlpha(0);
       h.glow.setAlpha(0);
@@ -1207,6 +1359,8 @@ export class VillageScene extends Phaser.Scene {
       dispatch({ type: "rest", pos: [Math.round(santa.x), Math.round(santa.y)] });
     this.wasMoving = moving;
 
+    this.updateBells(dt);
+    this.updateAmbience();
     this.updateMarkers();
     this.updateArrow();
     const near = this.lastInputKeyboard && !this.busy ? this.nearestTarget() : null;
@@ -1223,6 +1377,77 @@ export class VillageScene extends Phaser.Scene {
     return isHouse(t.id) && !isDelivered(this.state, t.id) && this.state.sack.length
       ? COPY.near.deliver
       : COPY.near.look;
+  }
+
+  /**
+   * The quiet, living layer: wind for the snow, twinkling string lights,
+   * lantern flames and candlelit windows. Only what is on screen is touched.
+   */
+  private updateAmbience(): void {
+    const t = this.time.now / 1000;
+    this.wind = 5 * Math.sin(t * 0.11) + 3 * Math.sin(t * 0.29 + 1.7) + 2;
+    const view = this.cameras.main.worldView;
+    for (const l of this.festoons) {
+      if (!l.on && !l.level && !l.bulbs[0]?.alpha) continue;
+      if (!Phaser.Geom.Rectangle.Overlaps(view, l.box)) continue;
+      const reveal = l.level * (l.bulbs.length + 3);
+      l.bulbs.forEach((b, j) => {
+        const on = Phaser.Math.Clamp(reveal - j, 0, 1);
+        const k = this.reduced ? 1 : 0.5 + 0.5 * Math.sin(t * l.speed[j]! + l.phase[j]!);
+        b.setAlpha(on * (0.7 + 0.3 * k));
+        l.glows[j]!.setAlpha(on * (0.1 + 0.28 * k));
+      });
+    }
+    if (this.reduced) return;
+    this.flames.forEach((f, i) =>
+      f.setAlpha(
+        0.42 +
+          0.05 * Math.sin(t * 7.3 + i) +
+          0.04 * Math.sin(t * 12.7 + i * 2.1) +
+          0.05 * Math.sin(t * 1.3 + i * 0.7),
+      ),
+    );
+    let i = 0;
+    for (const h of this.houses.values()) {
+      i++;
+      if (h.steady)
+        h.lit.setAlpha(0.93 + 0.04 * Math.sin(t * 9.1 + i * 1.3) + 0.03 * Math.sin(t * 2.3 + i));
+    }
+  }
+
+  /** Now and then a glint of moonlight on the frozen river or pond, if it's on screen. */
+  private glint(): void {
+    const v = this.cameras.main.worldView;
+    for (let n = 0; n < 8; n++) {
+      const p: Pt = [v.x + Math.random() * v.width, v.y + Math.random() * v.height];
+      if (!isWater(p)) continue;
+      const g = this.add
+        .image(Math.round(p[0]), Math.round(p[1]), "effects/twinkle.png")
+        .setBlendMode(ADD)
+        .setDepth(-390)
+        .setAlpha(0);
+      this.tweens.add({
+        targets: g,
+        alpha: 0.7,
+        duration: 450,
+        yoyo: true,
+        ease: "Sine.easeInOut",
+        onComplete: () => g.destroy(),
+      });
+      return;
+    }
+  }
+
+  /** Bells follow the team's speed and fade as it leaves the screen. */
+  private updateBells(dt: number): void {
+    const sl = this.sleigh;
+    const [x, y] = sl.visual;
+    const speed = Math.hypot(x - this.bellsAt[0], y - this.bellsAt[1]) / Math.max(dt, 0.001);
+    this.bellsAt = [x, y];
+    const v = this.cameras.main.worldView;
+    const away = Math.hypot(Math.max(v.x - x, 0, x - v.right), Math.max(v.y - y, 0, y - v.bottom));
+    const seen = sl.sprite.visible ? Math.max(0, 1 - away / 140) : 0;
+    setBells(sl.alt > 2 ? Math.min(1, speed / 90) * seen : 0);
   }
 
   private updateMarkers(): void {

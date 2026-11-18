@@ -39,6 +39,7 @@ export class Santa {
   private onArrive: (() => void) | null = null;
   facing: Facing = "s";
   full = false;
+  onStep: ((ground: "snow" | "stone" | "wood") => void) | null = null;
   x: number;
   y: number;
 
@@ -192,13 +193,21 @@ export class Santa {
     else this.facing = dy > 0 ? "s" : "n";
   }
 
-  /** Distance-based footprints, alternating left and right of the walking line. */
+  /**
+   * Distance-based footprints, alternating left and right of the walking line.
+   * Every other print is a footfall the game can hear.
+   */
   private trail(dist: number, dx: number, dy: number): void {
     this.travelled += dist;
     if (this.travelled < STEP) return;
     this.travelled = 0;
     const p: Pt = [this.x, this.y];
-    if (ellipseValue(p, PLAZA) < 1 || inRect(p, BRIDGE.deck)) return; // cobbles and planks
+    const ground = inRect(p, BRIDGE.deck) ? "wood" : ellipseValue(p, PLAZA) < 1 ? "stone" : "snow";
+    if (this.printSide > 0) this.onStep?.(ground);
+    if (ground !== "snow") {
+      this.printSide *= -1;
+      return; // no prints on cobbles and planks
+    }
     const len = Math.hypot(dx, dy) || 1;
     const nx = -dy / len;
     const ny = dx / len;

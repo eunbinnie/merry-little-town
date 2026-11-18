@@ -21,6 +21,10 @@ export class Sleigh {
   readonly sprite: Phaser.GameObjects.Sprite;
   private readonly shadow: Phaser.GameObjects.Image;
   private readonly nose: Phaser.GameObjects.Image;
+  /** A faint trail of gold behind the flying team, and a puff of snow on landing. */
+  private readonly dust: Phaser.GameObjects.Particles.ParticleEmitter;
+  private readonly puff: Phaser.GameObjects.Particles.ParticleEmitter;
+  private lastDust = 0;
   gx: number;
   gy: number;
   alt = 0;
@@ -42,6 +46,23 @@ export class Sleigh {
       .setDepth(9500)
       .setAlpha(0.8);
     scene.tweens.add({ targets: this.nose, alpha: 0.35, duration: 700, yoyo: true, repeat: -1 });
+    this.dust = scene.add.particles(0, 0, "effects/dot.png", {
+      emitting: false,
+      lifespan: { min: 500, max: 900 },
+      speed: { min: 2, max: 7 },
+      gravityY: 5,
+      alpha: { start: 0.85, end: 0 },
+      tint: [0xf4cf83, 0xfbe8b8, 0xfff4d6],
+      blendMode: Phaser.BlendModes.ADD,
+    });
+    this.puff = scene.add.particles(0, 0, "effects/flake.png", {
+      emitting: false,
+      speed: { min: 10, max: 30 },
+      angle: { min: 190, max: 350 },
+      lifespan: 600,
+      gravityY: 40,
+      alpha: { start: 1, end: 0 },
+    });
     this.park();
   }
 
@@ -81,6 +102,13 @@ export class Sleigh {
       x + this.dir * (nx - SLEIGH_META.w / 2),
       Math.round(this.gy - this.alt) + ny - SLEIGH_META.groundY,
     );
+    const now = this.scene.time.now;
+    if (this.alt > 6 && this.sprite.visible && now - this.lastDust > 55) {
+      this.lastDust = now;
+      const [cx, cy] = this.cargo;
+      this.dust.setDepth(this.gy);
+      this.dust.emitParticleAt(cx - this.dir * 4, cy + 6 + Math.random() * 4, 1);
+    }
   }
 
   /**
@@ -129,7 +157,13 @@ export class Sleigh {
         this.sync();
       },
       onComplete: () => {
-        if (land) this.park();
+        if (land) {
+          this.park();
+          if (this.sprite.visible) {
+            this.puff.setDepth(this.gy + 2);
+            this.puff.explode(10, this.gx, this.gy);
+          }
+        }
         resolve();
       },
       onStop: () => resolve(),
