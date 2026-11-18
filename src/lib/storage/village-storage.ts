@@ -2,6 +2,7 @@
 // store later without changing callers.
 import { INITIAL_STATE, parseState, type VillageState } from "@/features/village/game";
 
+// v1 saves live under the same key; parseState migrates them.
 const KEY = "christmas-village:v1";
 
 export function loadVillage(): VillageState {
