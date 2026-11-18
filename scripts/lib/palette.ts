@@ -120,6 +120,16 @@ export const C = {
   cookie3: "#dc9d5f",
   carrot: "#e0823f",
 
+  // stationery (the handwritten card)
+  paper: "#f5e8ca",
+  paper1: "#ebd8ae",
+  paper2: "#dcc597",
+  paper3: "#c8af83",
+  paperInk: "#4b382a",
+  paperRed: "#9d403e",
+  paperPine: "#425a45",
+  paperGold: "#c3a065",
+
   // characters
   skin0: "#c98a74",
   skin1: "#e9b394",

@@ -15,6 +15,7 @@ import { christmasTree } from "./art/tree.ts";
 import { ITEMS, WRAPS, giftBox, type WrapId } from "./art/gifts.ts";
 import { SANTA, TEAM, santaSheet, teamSheet } from "./art/characters.ts";
 import { paintGround } from "./art/terrain.ts";
+import * as paper from "./art/stationery.ts";
 import {
   BRIDGE,
   BUILDINGS,
@@ -142,6 +143,9 @@ save("effects/dot.png", dot);
 // ---------------------------------------------------------------- gifts + characters
 for (const id of Object.keys(WRAPS) as WrapId[]) save(`gifts/box-${id}.png`, giftBox(id));
 for (const [id, draw] of Object.entries(ITEMS)) save(`gifts/item-${id}.png`, draw());
+save("ui/paper.png", paper.paperTile());
+save("ui/holly.png", paper.holly());
+save("ui/stamp.png", paper.stamp());
 const santa = santaSheet();
 save("characters/santa.png", santa.sheet);
 const team = teamSheet();
