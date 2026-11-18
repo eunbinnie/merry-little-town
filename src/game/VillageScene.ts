@@ -1171,7 +1171,7 @@ export class VillageScene extends Phaser.Scene {
     this.lightTree(false);
     duckMusic("finale", 0.15);
     playSound("finale");
-    this.time.delayedCall(7600, () => duckMusic("finale", null));
+    this.time.delayedCall(10500, () => duckMusic("finale", null));
     NEIGHBOURS.forEach((id) => void this.lightHouse(id, false, false));
     this.refreshLamps(false);
     for (const s of this.snow) s.frequency = s.frequency / 2;

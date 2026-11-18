@@ -30,7 +30,7 @@ const GAIN: Record<SoundName, number> = {
   paper: 0.3,
   postcard: 0.55,
   finale: 0.7,
-  chapel: 0.45,
+  chime: 0.22,
 };
 /** At most this many of one sound at once (footsteps never pile up). */
 const CAP: Partial<Record<SoundName, number>> = { step: 2, stepWood: 2, place: 2, light: 2 };
@@ -53,7 +53,7 @@ let voices = 0;
 const perSound = new Map<SoundName, number>();
 const ducks = new Map<string, number>();
 let suspendTimer = 0;
-let chapelTimer = 0;
+let chimeTimer = 0;
 
 const hidden = () => document.visibilityState === "hidden";
 const live = () => Boolean(ctx && getSoundPrefs().on && !hidden());
@@ -146,7 +146,7 @@ function apply(): void {
   bus.music.gain.setTargetAtTime(p.music ? LEVEL.music * duck : 0, now, p.music ? 0.7 : 0.25);
   bus.sfx.gain.setTargetAtTime(p.sfx ? LEVEL.sfx : 0, now, 0.05);
   bus.ambient.gain.setTargetAtTime(p.ambient ? LEVEL.ambient : 0, now, 0.8);
-  scheduleChapel();
+  scheduleChime();
 }
 
 function startLoops(c: AudioContext, b: Buses): void {
@@ -164,7 +164,10 @@ function startLoops(c: AudioContext, b: Buses): void {
   }
 }
 
-/** Soft winter wind: band-passed noise whose colour and strength drift slowly. */
+/**
+ * A breath of winter air under the music: band-passed noise, kept well above
+ * the low rumble and very quiet, whose colour and strength drift slowly.
+ */
 function wind(c: AudioContext, out: AudioNode): void {
   const sr = c.sampleRate;
   const buf = c.createBuffer(1, sr * 4, sr);
@@ -175,13 +178,13 @@ function wind(c: AudioContext, out: AudioNode): void {
   src.loop = true;
   const band = c.createBiquadFilter();
   band.type = "bandpass";
-  band.frequency.value = 460;
-  band.Q.value = 0.8;
+  band.frequency.value = 950;
+  band.Q.value = 0.7;
   const soft = c.createBiquadFilter();
-  soft.type = "lowpass";
-  soft.frequency.value = 1100;
+  soft.type = "highpass";
+  soft.frequency.value = 420;
   const level = c.createGain();
-  level.gain.value = 0.2;
+  level.gain.value = 0.07;
   const lfo = (hz: number, amount: number, param: AudioParam) => {
     const o = c.createOscillator();
     o.frequency.value = hz;
@@ -190,31 +193,28 @@ function wind(c: AudioContext, out: AudioNode): void {
     o.connect(g).connect(param);
     o.start();
   };
-  lfo(0.053, 200, band.frequency);
-  lfo(0.087, 0.09, level.gain);
+  lfo(0.053, 250, band.frequency);
+  lfo(0.087, 0.03, level.gain);
   src.connect(band).connect(soft).connect(level).connect(out);
   src.start();
 }
 
-/** Now and then, far away, the chapel bell strikes twice. */
-function scheduleChapel(): void {
+/** Now and then, a few soft, bright chimes somewhere in the village. */
+function scheduleChime(): void {
   const want = live() && getSoundPrefs().ambient;
   if (!want) {
-    window.clearTimeout(chapelTimer);
-    chapelTimer = 0;
+    window.clearTimeout(chimeTimer);
+    chimeTimer = 0;
     return;
   }
-  if (chapelTimer) return;
-  chapelTimer = window.setTimeout(
+  if (chimeTimer) return;
+  chimeTimer = window.setTimeout(
     () => {
-      chapelTimer = 0;
-      if (live() && bus) {
-        voice(bus.ambient, "chapel", {});
-        voice(bus.ambient, "chapel", { gain: 0.75, at: 2.8 });
-      }
-      scheduleChapel();
+      chimeTimer = 0;
+      if (live() && bus) voice(bus.ambient, "chime", {});
+      scheduleChime();
     },
-    45000 + Math.random() * 50000,
+    35000 + Math.random() * 35000,
   );
 }
 
