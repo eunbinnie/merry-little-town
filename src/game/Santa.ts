@@ -215,7 +215,7 @@ export class Santa {
       )
       .setAlpha(0.9)
       .setVisible(true);
-    this.scene.tweens.add({ targets: img, alpha: 0, delay: 2600, duration: 5200 });
+    this.scene.tweens.add({ targets: img, alpha: 0, delay: 5000, duration: 6000 });
     this.puff.setDepth(this.y + 0.5);
     this.puff.emitParticleAt(this.x, this.y, 2);
   }

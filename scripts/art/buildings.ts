@@ -778,9 +778,9 @@ export function shadow(w: number, h: number): Px {
 
 export function footprints(): { v: Px; h: Px } {
   const v = new Px(2, 3);
-  v.map(0, 0, ["ab", "aa", "ab"], { a: C.snow1, b: C.snow2 });
+  v.map(0, 0, ["ab", "aa", "ab"], { a: C.snow0, b: C.snow1 });
   const h = new Px(3, 2);
-  h.map(0, 0, ["aab", "aaa"], { a: C.snow1, b: C.snow2 });
+  h.map(0, 0, ["aab", "aaa"], { a: C.snow0, b: C.snow1 });
   return { v, h };
 }
 
