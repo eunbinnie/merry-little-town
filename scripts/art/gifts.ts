@@ -11,107 +11,37 @@ export const WRAPS = {
   crimson: {
     paper: [C.red0, C.red2, C.red3, C.red4],
     ribbon: [C.gold0, C.gold2, C.gold3, C.gold4],
-    dots: C.gold2,
-    pattern: "dots",
   },
   pine: {
     paper: [C.pine1, C.pine2, C.pine3, C.pine4],
     ribbon: [C.red1, C.red2, C.red3, C.red4],
-    dots: C.snow5,
-    pattern: "flakes",
   },
   ivory: {
     paper: [C.ivory2, C.ivory1, C.ivory, "#fffdf7"],
     ribbon: [C.pine1, C.pine2, C.pine3, C.pine4],
-    dots: C.red3,
-    pattern: "stripes",
   },
   midnight: {
     paper: [C.blue0, C.blue1, C.blue2, C.blue3],
     ribbon: [C.snow2, C.snow4, C.snow5, C.snow6],
-    dots: C.gold3,
-    pattern: "stars",
   },
-} as const satisfies Record<string, { paper: Ramp4; ribbon: Ramp4; dots: Color; pattern: string }>;
+} as const satisfies Record<string, { paper: Ramp4; ribbon: Ramp4 }>;
 export type WrapId = keyof typeof WRAPS;
 
-function paperAt(w: (typeof WRAPS)[WrapId], x: number, y: number, base: Color): Color {
-  switch (w.pattern) {
-    case "dots":
-      return (x + y * 2) % 6 === 0 && y % 3 === 0 ? w.dots : base;
-    case "flakes":
-      return (x * 3 + y * 5) % 17 === 0 ? w.dots : base;
-    case "stripes":
-      return (x + y) % 6 < 2 ? w.dots : base;
-    case "stars":
-      return (x * 7 + y * 11) % 23 === 0 ? w.dots : base;
-  }
-}
-
-/** Box body + lid as separate, aligned 40×40 layers so the lid can fly off. */
-export function giftBox(id: WrapId): { body: Px; lid: Px; small: Px } {
-  const w = WRAPS[id];
-  const body = new Px(40, 40);
-  const lid = new Px(40, 40);
-  const [pd, pm, pl, ph] = w.paper;
-  const [rd, rm, rl, rh] = w.ribbon;
-  // body: x 6..33, y 19..38
-  for (let y = 19; y < 39; y++)
-    for (let x = 6; x < 34; x++) {
-      let c: Color = x > 28 ? pm : pl;
-      if (x === 6) c = ph;
-      if (y === 38 || x === 33) c = pd;
-      if (y < 21) c = pd; // shadow under the lid
-      c = c === pl || c === pm ? paperAt(w, x, y, c) : c;
-      if (x >= 18 && x <= 21) c = x === 18 ? rh : x === 21 ? rd : y === 38 ? rd : rl;
-      if (y >= 27 && y <= 29) c = y === 27 ? rh : y === 29 ? rd : rl;
-      if (x >= 18 && x <= 21 && y >= 27 && y <= 29) c = rm;
-      body.set(x, y, c);
-    }
-  // inside of the box (visible once the lid is gone)
-  body.rect(7, 19, 26, 2, "#1a1220");
-  for (let x = 8; x < 32; x += 3) body.set(x, 19, C.ivory1);
-  // lid: x 4..35, y 12..20, with the bow on top
-  for (let y = 12; y < 21; y++)
-    for (let x = 4; x < 36; x++) {
-      let c: Color = x > 30 ? pm : pl;
-      if (y === 12 || x === 4) c = ph;
-      if (y === 20 || x === 35) c = pd;
-      c = c === pl || c === pm ? paperAt(w, x, y, c) : c;
-      if (x >= 18 && x <= 21) c = x === 18 ? rh : x === 21 ? rd : rl;
-      lid.set(x, y, c);
-    }
-  lid.map(
-    9,
-    2,
-    [
-      "..aaa.......aaa..",
-      ".abbba.....abbba.",
-      "abccbba...abbccba",
-      "abc..bba.abb..cba",
-      "abc...bbabb...cba",
-      ".abc..bdkdb..cba.",
-      "..abbbbdkdbbbba..",
-      "...aaabdddbaaa...",
-      ".....ab...ba.....",
-      "....ab.....ba....",
-    ],
-    { a: rd, b: rm, c: rh, d: rl, k: rd },
-  );
-  body.outline(INK);
-  lid.outline(INK);
-  // doorstep version: 11×10
-  const small = new Px(11, 10);
-  small.rect(1, 3, 9, 7, pl);
-  small.vline(9, 3, 9, pd);
-  small.hline(1, 9, 9, pd);
-  small.rect(0, 2, 11, 2, ph);
-  small.hline(0, 10, 3, pm);
-  small.vline(5, 2, 9, rl);
-  small.hline(1, 9, 6, rl);
-  small.map(2, 0, ["aa...aa", ".abbba."], { a: rm, b: rl });
-  small.hline(1, 9, 9, C.snow5);
-  return { body, lid, small };
+/** Wrapped present, 11×10: doorstep gift, sleigh cargo and HUD icon. */
+export function giftBox(id: WrapId): Px {
+  const [pd, pm, pl, ph] = WRAPS[id].paper;
+  const [, rm, rl] = WRAPS[id].ribbon;
+  const px = new Px(11, 10);
+  px.rect(1, 3, 9, 7, pl);
+  px.vline(9, 3, 9, pd);
+  px.hline(1, 9, 9, pd);
+  px.rect(0, 2, 11, 2, ph);
+  px.hline(0, 10, 3, pm);
+  px.vline(5, 2, 9, rl);
+  px.hline(1, 9, 6, rl);
+  px.map(2, 0, ["aa...aa", ".abbba."], { a: rm, b: rl });
+  px.hline(1, 9, 9, C.snow5);
+  return px;
 }
 
 // ---------------------------------------------------------------- items

@@ -273,16 +273,6 @@ export function giftPile(): Px {
   return px;
 }
 
-export function snowflake(): Px {
-  const px = new Px(7, 7);
-  px.map(0, 0, ["...a...", ".a.a.a.", "..bab..", "aaacaaa", "..bab..", ".a.a.a.", "...a..."], {
-    a: C.snow5,
-    b: C.snow3,
-    c: C.snow6,
-  });
-  return px;
-}
-
 export function sparkle(big: boolean): Px {
   if (!big) {
     const px = new Px(5, 5);

@@ -119,6 +119,28 @@ export const C = {
   cookie2: "#c07c42",
   cookie3: "#dc9d5f",
   carrot: "#e0823f",
+
+  // characters
+  skin0: "#c98a74",
+  skin1: "#e9b394",
+  skin2: "#f6d0b2",
+  cheek: "#e5837a",
+  ink: "#1a1220",
+  boot0: "#171a26",
+  boot1: "#2b3044",
+  boot2: "#47506b",
+  fur0: "#7b5a43",
+  fur1: "#9b7354",
+  fur2: "#b98f68",
+  fur3: "#d7b48a",
+  antler: "#e3d6bd",
+  antlerShade: "#b4a387",
+  nose: "#ff5a4f",
+  ice0: "#22385e",
+  ice1: "#2f4c78",
+  ice2: "#41669a",
+  ice3: "#6d8fc0",
+  ice4: "#a5bfe0",
 } as const;
 
 export type ColorName = keyof typeof C;
