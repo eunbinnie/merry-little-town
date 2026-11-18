@@ -100,6 +100,13 @@ export const COPY = {
     linkCopied: "마을 주소를 복사했어요.",
     holdToSave: "이미지를 길게 눌러 사진에 저장할 수도 있어요.",
   },
+  sound: {
+    state: (on: boolean) => (on ? "소리 켜짐" : "소리 꺼짐"),
+    settings: "소리 설정",
+    music: "음악",
+    sfx: "효과음",
+    ambient: "바람 소리",
+  },
   restart: {
     title: "처음부터 다시 배달할까요?",
     body: "지금까지 전한 선물과 밝혀진 불빛이 모두 사라져요.",

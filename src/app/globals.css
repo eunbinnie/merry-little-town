@@ -162,6 +162,45 @@ body {
   );
 }
 
+/* sound: the landing switch and the HUD menu */
+.sound-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0 0.85rem;
+  color: rgb(247 241 229 / 0.7);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.sound-chip[aria-pressed="true"] {
+  color: var(--color-glow);
+}
+.sound-chip:focus-visible,
+.sound-option:focus-within {
+  outline: 2px solid var(--color-ivory);
+  outline-offset: 2px;
+}
+.sound-option {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 40px;
+  padding: 0 0.85rem;
+  color: var(--color-ivory);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.sound-option[data-disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+.sound-option input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--color-glow);
+}
+
 /* sack slots in the HUD */
 .slot {
   width: 28px;

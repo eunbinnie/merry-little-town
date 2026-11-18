@@ -22,6 +22,8 @@ import { ASSET_ROOT, BUILDING_IDS } from "@/game/world";
 import type { Destination, GameEvent, GameHandle, SceneShot } from "@/game/types";
 import { CardEditor } from "@/components/card/CardEditor";
 import { PostcardSheet } from "@/components/card/PostcardSheet";
+import { duckMusic, playSound, unlockSound } from "@/audio/sound";
+import { SoundMenu, SoundToggle, useSoundUnlock } from "./SoundControl";
 
 const TOTAL = HOUSE_IDS.length;
 const asset = (rel: string) => `${ASSET_ROOT}/${rel}`;
@@ -101,6 +103,7 @@ export function ChristmasVillage() {
         case "celebrate":
           return setAnnouncement(COPY.toast.complete);
         case "card":
+          playSound("paper");
           setShareStatus("");
           setCard({
             houseId: e.houseId,
@@ -137,6 +140,15 @@ export function ChristmasVillage() {
     const t = window.setTimeout(() => setToast(null), toast.items ? 4200 : 3400);
     return () => window.clearTimeout(t);
   }, [toast]);
+
+  useSoundUnlock();
+  // the music steps back while a card is open
+  const cardOpen = card !== null;
+  useEffect(() => {
+    if (!cardOpen) return;
+    duckMusic("card", 0.45);
+    return () => duckMusic("card", null);
+  }, [cardOpen]);
 
   // release generated images once they are replaced or closed
   useEffect(() => () => void (photo && URL.revokeObjectURL(photo.url)), [photo]);
@@ -208,6 +220,7 @@ export function ChristmasVillage() {
     try {
       const shot = c.shot ?? (await game.current.leaveHouse());
       const blob = await composeCard(shot, c.text, c.giftId);
+      playSound("postcard");
       setShareStatus("");
       setCard(
         (now) =>
@@ -268,15 +281,21 @@ export function ChristmasVillage() {
               {COPY.landing.description}
             </p>
           </div>
-          <button
-            type="button"
-            className="pixel-btn fade-in w-full max-w-xs text-lg"
-            disabled={!ready}
-            autoFocus
-            onClick={() => dispatch({ type: "start" })}
-          >
-            {COPY.landing.cta}
-          </button>
+          <div className="fade-in flex w-full max-w-xs flex-col items-center gap-2">
+            <button
+              type="button"
+              className="pixel-btn w-full text-lg"
+              disabled={!ready}
+              autoFocus
+              onClick={() => {
+                unlockSound();
+                dispatch({ type: "start" });
+              }}
+            >
+              {COPY.landing.cta}
+            </button>
+            <SoundToggle />
+          </div>
         </section>
       )}
 
@@ -323,7 +342,10 @@ export function ChristmasVillage() {
           canShare={canShareFiles()}
           onShare={() => share(card.image!.blob, cardFile)}
           onSave={() => save(card.image!.blob, cardFile)}
-          onEdit={() => setCard((c) => c && { ...c, stage: "writing" })}
+          onEdit={() => {
+            playSound("paper");
+            setCard((c) => c && { ...c, stage: "writing" });
+          }}
           onClose={closeCard}
           closeLabel={COPY.card.back}
           onCopyLink={copy}
@@ -346,7 +368,7 @@ export function ChristmasVillage() {
 
       {playing && village && !card && (
         <>
-          <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 px-3 pt-[calc(env(safe-area-inset-top)+10px)]">
+          <header className="pointer-events-none absolute inset-x-0 top-0 z-25 flex items-start justify-between gap-2 px-3 pt-[calc(env(safe-area-inset-top)+10px)]">
             <div className="plate pointer-events-auto flex items-center gap-2.5 px-3 py-2">
               <div
                 className="flex items-center gap-1.5"
@@ -375,30 +397,35 @@ export function ChristmasVillage() {
                 ))}
               </div>
             </div>
-            <div className="pointer-events-auto flex gap-2">
-              <button
-                type="button"
-                className={`pixel-btn ${complete ? "pulse" : ""}`}
-                data-variant={complete ? undefined : "ghost"}
-                data-size="sm"
-                onClick={takePhoto}
-                disabled={busy || photoState !== "idle"}
-              >
-                <Icon rel="effects/sparkle-large.png" size={18} />
-                {COPY.hud.photo}
-              </button>
-              <button
-                type="button"
-                className="pixel-btn"
-                data-variant="ghost"
-                data-size="sm"
-                onClick={() =>
-                  deliveries.length || sack.length ? restartRef.current?.showModal() : reset()
-                }
-                disabled={busy}
-              >
-                {COPY.hud.menu}
-              </button>
+            <div className="flex flex-col items-end gap-2">
+              <div className="pointer-events-auto flex gap-2">
+                <button
+                  type="button"
+                  className={`pixel-btn ${complete ? "pulse" : ""}`}
+                  data-variant={complete ? undefined : "ghost"}
+                  data-size="sm"
+                  onClick={takePhoto}
+                  disabled={busy || photoState !== "idle"}
+                >
+                  <Icon rel="effects/sparkle-large.png" size={18} />
+                  {COPY.hud.photo}
+                </button>
+                <button
+                  type="button"
+                  className="pixel-btn"
+                  data-variant="ghost"
+                  data-size="sm"
+                  onClick={() =>
+                    deliveries.length || sack.length ? restartRef.current?.showModal() : reset()
+                  }
+                  disabled={busy}
+                >
+                  {COPY.hud.menu}
+                </button>
+              </div>
+              <div className="pointer-events-auto">
+                <SoundMenu />
+              </div>
             </div>
           </header>
 
@@ -434,7 +461,7 @@ export function ChristmasVillage() {
           {toast && (
             <div
               key={toast.id}
-              className="toast-in pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top)+72px)] z-20 flex justify-center px-4"
+              className="toast-in pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top)+118px)] z-20 flex justify-center px-4"
               aria-hidden
             >
               <div className="plate flex max-w-sm items-center gap-3 px-4 py-3">
