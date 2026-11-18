@@ -300,15 +300,19 @@ export function ChristmasVillage() {
       )}
 
       {intro && (
-        <button
-          type="button"
-          className="pixel-btn absolute right-4 bottom-[calc(env(safe-area-inset-bottom)+20px)] z-30"
-          data-variant="ghost"
-          data-size="sm"
-          onClick={() => game.current?.skipIntro()}
-        >
-          {COPY.intro.skip}
-        </button>
+        // wrapper owns the position: .pixel-btn is unlayered CSS with
+        // `position: relative`, which beats Tailwind's layered `absolute`
+        <div className="absolute right-[calc(env(safe-area-inset-right)+16px)] bottom-[calc(env(safe-area-inset-bottom)+20px)] z-30">
+          <button
+            type="button"
+            className="pixel-btn"
+            data-variant="ghost"
+            data-size="sm"
+            onClick={() => game.current?.skipIntro()}
+          >
+            {COPY.intro.skip}
+          </button>
+        </div>
       )}
 
       {card?.stage === "writing" && (
