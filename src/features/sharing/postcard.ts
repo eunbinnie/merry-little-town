@@ -9,7 +9,7 @@ const H = 1920;
 const S = 6;
 
 const images = new Map<string, Promise<HTMLImageElement>>();
-function load(rel: string): Promise<HTMLImageElement> {
+export function load(rel: string): Promise<HTMLImageElement> {
   let p = images.get(rel);
   if (!p) {
     p = new Promise((resolve, reject) => {
@@ -23,13 +23,13 @@ function load(rel: string): Promise<HTMLImageElement> {
   return p;
 }
 
-function fontFamily(variable: string, fallback: string): string {
+export function fontFamily(variable: string, fallback: string): string {
   const v = getComputedStyle(document.body).getPropertyValue(variable).trim();
   return v || fallback;
 }
 
 /** Stepped (pixel-row) darkening so the text stays legible over any scene. */
-function band(
+export function band(
   ctx: CanvasRenderingContext2D,
   fromY: number,
   rows: number,
@@ -129,33 +129,34 @@ export function downloadBlob(blob: Blob, name = POSTCARD_FILENAME): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-async function copyText(text: string): Promise<boolean> {
+export async function copyLink(): Promise<boolean> {
   try {
-    await navigator.clipboard.writeText(text);
+    await navigator.clipboard.writeText(window.location.origin + "/");
     return true;
   } catch {
     return false;
   }
 }
 
+export type ShareResult = "shared" | "cancelled" | "unsupported" | "failed";
+
+export const canShareFiles = (): boolean =>
+  typeof navigator !== "undefined" &&
+  Boolean(
+    navigator.canShare?.({ files: [new File([""], POSTCARD_FILENAME, { type: "image/png" })] }),
+  );
+
 /**
- * Share the card as a file when the platform allows it; otherwise save the
- * image and copy the app link so the user can still pass it on.
+ * Hand the PNG to the system share sheet (KakaoTalk, Messages, Instagram…).
+ * Cancelling is a normal outcome; nothing is reported as shared unless it was.
  */
-export async function sharePostcard(blob: Blob): Promise<"shared" | "cancelled" | "fallback"> {
-  const url = window.location.origin + "/";
-  const file = new File([blob], POSTCARD_FILENAME, { type: "image/png" });
-  const text = `${COPY.photo.shareText}\n${url}`;
-  if (navigator.canShare?.({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: COPY.photo.shareTitle, text });
-      return "shared";
-    } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") return "cancelled";
-      // NotAllowedError etc. → fall through to the fallback
-    }
+export async function shareImage(blob: Blob, name = POSTCARD_FILENAME): Promise<ShareResult> {
+  const file = new File([blob], name, { type: "image/png" });
+  if (!navigator.canShare?.({ files: [file] })) return "unsupported";
+  try {
+    await navigator.share({ files: [file], title: COPY.photo.shareTitle });
+    return "shared";
+  } catch (e) {
+    return e instanceof DOMException && e.name === "AbortError" ? "cancelled" : "failed";
   }
-  downloadBlob(blob);
-  await copyText(url);
-  return "fallback";
 }

@@ -2,12 +2,6 @@
 import type { GiftId, HouseId } from "@/features/village/game";
 import type { BuildingId } from "@/game/world";
 
-/** 을/를 depending on whether the last Hangul syllable has a final consonant. */
-export function objectParticle(word: string): string {
-  const code = word.charCodeAt(word.length - 1) - 0xac00;
-  return code >= 0 && code < 11172 && code % 28 !== 0 ? "을" : "를";
-}
-
 export const COPY = {
   meta: {
     title: "크리스마스가 도착하는 마을",
@@ -49,9 +43,6 @@ export const COPY = {
     allLoaded: "남은 선물은 모두 자루에 있어요",
     noGift: "선물 자루가 비었어요",
     noGiftBody: "썰매에서 선물을 챙겨 와요.",
-    already: "이미 선물을 받은 집이에요",
-    delivered: (house: string, gift: string) =>
-      `${house}에 ${gift}${objectParticle(gift)} 전했어요`,
     chimney: "문이 눈에 꽁꽁 막혔어요",
     chimneyBody: "루돌프! 굴뚝으로 가자!",
     complete: "마을에 크리스마스가 도착했어요",
@@ -68,16 +59,45 @@ export const COPY = {
   },
   photo: {
     title: "크리스마스 사진",
-    making: "사진을 인화하는 중…",
-    save: "이미지 저장",
-    share: "공유하기",
     close: "닫기",
-    saved: "사진을 저장했어요.",
-    shared: "사진을 보냈어요.",
-    fallback: "사진을 저장하고 마을 주소를 복사했어요.",
     failed: "사진을 만들지 못했어요. 잠시 후 다시 시도해주세요.",
     shareTitle: "크리스마스가 도착하는 마을",
-    shareText: "오늘 밤 산타가 되어 마을에 크리스마스를 전했어요. 당신도 걸어보세요.",
+  },
+  card: {
+    deliveredTitle: "작은 선물을 두고 왔어요.",
+    deliveredBody: "이 선물은 누구에게 보내고 싶나요?",
+    revisitTitle: (house: string) => `${house}에 두고 온 선물`,
+    revisitBody: "이 선물에 마음을 담아볼까요?",
+    greeting: "Merry Christmas",
+    to: "To.",
+    from: "From.",
+    toPlaceholder: "소중한 사람의 이름",
+    messagePlaceholder: "따뜻한 마음을 전해보세요.",
+    fromPlaceholder: "보내는 사람",
+    toLabel: "받는 사람",
+    messageLabel: "크리스마스 메시지",
+    fromLabel: "보내는 사람, 비워두면 익명",
+    giftLabel: (gift: string) => `함께 둔 선물: ${gift}`,
+    done: "카드 완성하기",
+    later: "나중에 쓸게요",
+    leaving: "산타가 조용히 떠나는 중…",
+    previewTitle: "당신이 누군가의 산타가 되었어요.",
+    previewBody: "소중한 사람에게 작은 크리스마스를 선물해보세요.",
+    share: "선물 공유하기",
+    save: "이미지 저장하기",
+    edit: "편지 수정하기",
+    back: "마을로 돌아가기",
+    copyLink: "마을 주소 복사",
+    failed: "카드를 그리지 못했어요. 다시 시도해주세요.",
+    alt: (to: string) => `${to}에게 보내는 크리스마스 카드`,
+  },
+  share: {
+    shared: "공유를 마쳤어요.",
+    saved: "이미지를 저장했어요. 메신저에서 보내주세요.",
+    unsupported: "이 브라우저는 바로 공유할 수 없어요. 이미지를 저장해 메신저로 보내주세요.",
+    failed: "공유하지 못했어요. 이미지를 저장해 보내주세요.",
+    linkCopied: "마을 주소를 복사했어요.",
+    holdToSave: "이미지를 길게 눌러 사진에 저장할 수도 있어요.",
   },
   restart: {
     title: "처음부터 다시 배달할까요?",

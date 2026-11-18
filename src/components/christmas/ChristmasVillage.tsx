@@ -1,18 +1,47 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { BUILDING_NAMES, COPY, GIFTS } from "@/constants/copy";
-import { HOUSE_IDS, SACK_SIZE, isComplete, type GiftId } from "@/features/village/game";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { BUILDING_NAMES, COPY, GIFTS, HOUSE_NAMES } from "@/constants/copy";
+import {
+  HOUSE_IDS,
+  SACK_SIZE,
+  isComplete,
+  type GiftId,
+  type HouseId,
+} from "@/features/village/game";
 import { dispatch, useVillage } from "@/features/village/store";
-import { composePostcard, downloadBlob, sharePostcard } from "@/features/sharing/postcard";
+import {
+  canShareFiles,
+  composePostcard,
+  copyLink,
+  downloadBlob,
+  shareImage,
+} from "@/features/sharing/postcard";
+import { composeCard, type CardText } from "@/features/sharing/card";
 import { ASSET_ROOT, BUILDING_IDS } from "@/game/world";
-import type { Destination, GameEvent, GameHandle } from "@/game/types";
+import type { Destination, GameEvent, GameHandle, SceneShot } from "@/game/types";
+import { CardEditor } from "@/components/card/CardEditor";
+import { PostcardSheet } from "@/components/card/PostcardSheet";
 
 const TOTAL = HOUSE_IDS.length;
 const asset = (rel: string) => `${ASSET_ROOT}/${rel}`;
 
 type Toast = { id: number; title: string; body?: string; items?: GiftId[] };
 type Photo = { url: string; blob: Blob };
+/**
+ * One card per delivered gift, kept in memory only (never stored or sent).
+ * The delivery itself is already saved; nothing here can undo or repeat it.
+ */
+type Card = {
+  houseId: HouseId;
+  giftId: GiftId;
+  fresh: boolean;
+  stage: "writing" | "leaving" | "preview";
+  text: CardText;
+  shot: SceneShot | null; // the scene is rendered once; edits only redraw the paper
+  image: Photo | null;
+  error?: string;
+};
 
 function Icon({
   rel,
@@ -49,9 +78,9 @@ export function ChristmasVillage() {
   const [announcement, setAnnouncement] = useState("");
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [photoState, setPhotoState] = useState<"idle" | "making" | "flash">("idle");
-  const [photoStatus, setPhotoStatus] = useState("");
+  const [card, setCard] = useState<Card | null>(null);
+  const [shareStatus, setShareStatus] = useState("");
   const restartRef = useRef<HTMLDialogElement>(null);
-  const photoRef = useRef<HTMLDialogElement>(null);
 
   // Phaser is loaded only in the browser, once; React state never recreates it
   useEffect(() => {
@@ -71,6 +100,21 @@ export function ChristmasVillage() {
           return setNear(e.label);
         case "celebrate":
           return setAnnouncement(COPY.toast.complete);
+        case "card":
+          setShareStatus("");
+          setCard({
+            houseId: e.houseId,
+            giftId: e.giftId,
+            fresh: e.fresh,
+            stage: "writing",
+            text: { to: "", message: "", from: "" },
+            shot: null,
+            image: null,
+          });
+          setAnnouncement(
+            e.fresh ? COPY.card.deliveredTitle : COPY.card.revisitTitle(HOUSE_NAMES[e.houseId]),
+          );
+          return;
         case "toast":
           setToast({ id: Date.now(), title: e.title, body: e.body, items: e.items });
           setAnnouncement([e.title, e.body].filter(Boolean).join(". "));
@@ -94,7 +138,10 @@ export function ChristmasVillage() {
     return () => window.clearTimeout(t);
   }, [toast]);
 
+  // release generated images once they are replaced or closed
   useEffect(() => () => void (photo && URL.revokeObjectURL(photo.url)), [photo]);
+  const cardUrl = card?.image?.url;
+  useEffect(() => () => void (cardUrl && URL.revokeObjectURL(cardUrl)), [cardUrl]);
 
   const started = village?.started ?? false;
   const deliveries = village?.deliveries ?? [];
@@ -117,13 +164,12 @@ export function ChristmasVillage() {
   const takePhoto = async () => {
     if (!game.current || photoState !== "idle") return;
     setPhotoState("flash");
-    setPhotoStatus("");
+    setShareStatus("");
     try {
       const { image, chill } = await game.current.capture();
       setPhotoState("making");
       const blob = await composePostcard(image, chill, deliveries);
       setPhoto({ url: URL.createObjectURL(blob), blob });
-      photoRef.current?.showModal();
     } catch {
       setAnnouncement(COPY.photo.failed);
       setToast({ id: Date.now(), title: COPY.photo.failed });
@@ -132,23 +178,60 @@ export function ChristmasVillage() {
     }
   };
 
-  const savePhoto = () => {
-    if (!photo) return;
-    downloadBlob(photo.blob);
-    setPhotoStatus(COPY.photo.saved);
+  // ---- sharing (same PNG as the preview)
+  const save = (blob: Blob, name?: string) => {
+    downloadBlob(blob, name);
+    setShareStatus(COPY.share.saved);
+  };
+  const share = async (blob: Blob, name?: string) => {
+    setShareStatus("");
+    const r = await shareImage(blob, name);
+    setShareStatus(
+      r === "shared"
+        ? COPY.share.shared
+        : r === "unsupported"
+          ? COPY.share.unsupported
+          : r === "failed"
+            ? COPY.share.failed
+            : "", // cancelled: nothing happened, nothing to say
+    );
+  };
+  const copy = async () => {
+    if (await copyLink()) setShareStatus(COPY.share.linkCopied);
   };
 
-  const sharePhoto = async () => {
-    if (!photo) return;
+  // ---- the personal card
+  const finishCard = async () => {
+    const c = card;
+    if (!c || !game.current) return;
+    setCard({ ...c, stage: "leaving", error: undefined });
     try {
-      const r = await sharePostcard(photo.blob);
-      setPhotoStatus(
-        r === "shared" ? COPY.photo.shared : r === "fallback" ? COPY.photo.fallback : "",
+      const shot = c.shot ?? (await game.current.leaveHouse());
+      const blob = await composeCard(shot, c.text, c.giftId);
+      setShareStatus("");
+      setCard(
+        (now) =>
+          now && {
+            ...now,
+            stage: "preview",
+            shot,
+            image: { blob, url: URL.createObjectURL(blob) },
+          },
       );
     } catch {
-      setPhotoStatus(COPY.photo.failed);
+      setCard((now) => now && { ...now, stage: "writing", error: COPY.card.failed });
     }
   };
+  const closeCard = useCallback(() => {
+    setCard(null);
+    setShareStatus("");
+    game.current?.endCard();
+  }, []);
+  const closePhoto = useCallback(() => {
+    setPhoto(null);
+    setShareStatus("");
+  }, []);
+  const cardFile = card ? `christmas-card-${card.houseId}.png` : undefined;
 
   const reset = () => {
     dispatch({ type: "reset" });
@@ -209,7 +292,59 @@ export function ChristmasVillage() {
         </button>
       )}
 
-      {playing && village && (
+      {card?.stage === "writing" && (
+        <CardEditor
+          title={
+            card.fresh
+              ? COPY.card.deliveredTitle
+              : COPY.card.revisitTitle(HOUSE_NAMES[card.houseId])
+          }
+          body={card.fresh ? COPY.card.deliveredBody : COPY.card.revisitBody}
+          giftId={card.giftId}
+          value={card.text}
+          onChange={(text) => setCard((c) => c && { ...c, text })}
+          onDone={finishCard}
+          onLater={closeCard}
+          error={card.error}
+        />
+      )}
+      {card?.stage === "leaving" && (
+        <p className="ui-shadow fade-in pointer-events-none absolute inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+28px)] z-30 text-center text-sm text-ivory/80">
+          {COPY.card.leaving}
+        </p>
+      )}
+      {card?.stage === "preview" && card.image && (
+        <PostcardSheet
+          url={card.image.url}
+          alt={COPY.card.alt(card.text.to)}
+          title={COPY.card.previewTitle}
+          body={COPY.card.previewBody}
+          status={shareStatus}
+          canShare={canShareFiles()}
+          onShare={() => share(card.image!.blob, cardFile)}
+          onSave={() => save(card.image!.blob, cardFile)}
+          onEdit={() => setCard((c) => c && { ...c, stage: "writing" })}
+          onClose={closeCard}
+          closeLabel={COPY.card.back}
+          onCopyLink={copy}
+        />
+      )}
+      {photo && (
+        <PostcardSheet
+          url={photo.url}
+          alt={COPY.postcard.message}
+          title={COPY.photo.title}
+          status={shareStatus}
+          canShare={canShareFiles()}
+          onShare={() => share(photo.blob)}
+          onSave={() => save(photo.blob)}
+          onClose={closePhoto}
+          closeLabel={COPY.photo.close}
+          onCopyLink={copy}
+        />
+      )}
+
+      {playing && village && !card && (
         <>
           <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 px-3 pt-[calc(env(safe-area-inset-top)+10px)]">
             <div className="plate pointer-events-auto flex items-center gap-2.5 px-3 py-2">
@@ -356,46 +491,6 @@ export function ChristmasVillage() {
       <p className="sr-only" role="status" aria-live="polite">
         {announcement}
       </p>
-
-      <dialog
-        ref={photoRef}
-        className="plate m-auto w-[min(24rem,calc(100vw-1.5rem))] p-4 text-center text-ivory backdrop:bg-[rgb(10_16_29/0.75)]"
-        aria-labelledby="photo-title"
-        onClose={() => setPhotoStatus("")}
-      >
-        <h2 id="photo-title" className="text-base font-bold">
-          {COPY.photo.title}
-        </h2>
-        {photo && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={photo.url}
-            alt={COPY.postcard.message}
-            className="mx-auto mt-3 aspect-[9/16] max-h-[58dvh] w-auto"
-          />
-        )}
-        <p className="mt-2 min-h-5 text-xs text-ivory/80" aria-live="polite">
-          {photoStatus}
-        </p>
-        <div className="mt-2 flex gap-2">
-          <button type="button" className="pixel-btn flex-1" onClick={savePhoto}>
-            {COPY.photo.save}
-          </button>
-          <button
-            type="button"
-            className="pixel-btn flex-1"
-            data-variant="red"
-            onClick={sharePhoto}
-          >
-            {COPY.photo.share}
-          </button>
-        </div>
-        <form method="dialog" className="mt-2">
-          <button type="submit" className="pixel-btn w-full" data-variant="ghost">
-            {COPY.photo.close}
-          </button>
-        </form>
-      </dialog>
 
       <dialog
         ref={restartRef}
