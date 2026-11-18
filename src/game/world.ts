@@ -363,6 +363,21 @@ export function doorStand(id: BuildingId, m: BuildingMeta): Pt {
   return [b.x + m.door[0], b.y + m.door[1] + 7];
 }
 
+/**
+ * Postcard framing in art pixels (×6 = 1080×1920). The served house's door
+ * line sits on `doorRow`, so the paper card laid over the lower part (from
+ * `cardTop`) never covers the door or the gift on the doorstep.
+ */
+export const POSTCARD = { w: 180, h: 320, doorRow: 158, cardTop: 194 } as const;
+
+export function postcardFrame(id: BuildingId, m: BuildingMeta): Rect {
+  const b = BUILDINGS[id];
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+  const left = clamp(Math.round(b.x + m.w / 2 - POSTCARD.w / 2), 0, WORLD.w - POSTCARD.w);
+  const top = clamp(Math.round(b.y + m.door[1] - POSTCARD.doorRow), 0, WORLD.h - POSTCARD.h);
+  return [left, top, POSTCARD.w, POSTCARD.h];
+}
+
 export const sizesOf = (meta: Record<BuildingId, BuildingMeta>): Sized =>
   Object.fromEntries(BUILDING_IDS.map((id) => [id, [meta[id].w, meta[id].h]])) as unknown as Sized;
 

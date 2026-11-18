@@ -3,7 +3,7 @@
 // placed at doors. React owns the overlay UI; this scene emits events to it.
 import * as Phaser from "phaser";
 import { BUILDING_META, SPRITE_SIZES, SANTA_META, SLEIGH_META } from "@/constants/sprites";
-import { BUILDING_NAMES, BUILDING_NOTES, COPY, GIFTS, HOUSE_NAMES } from "@/constants/copy";
+import { BUILDING_NAMES, BUILDING_NOTES, COPY, GIFTS } from "@/constants/copy";
 import {
   CHIMNEY_HOUSE,
   HOUSE_IDS,
@@ -32,13 +32,16 @@ import {
   SPAWN,
   TREE,
   WORLD,
+  POSTCARD,
   doorStand,
   obstacles,
+  postcardFrame,
   sizesOf,
   worldProps,
   type BuildingId,
   type LampGroup,
   type Pt,
+  type Rect,
 } from "./world";
 import { Grid } from "./grid";
 import { Santa, createSantaAnims } from "./Santa";
@@ -89,6 +92,10 @@ export class VillageScene extends Phaser.Scene {
   private wasMoving = false;
   private reduced = false;
   private cleanup: Array<() => void> = [];
+  /** House whose card is being written; the scene stays paused meanwhile. */
+  private cardHouse: HouseId | null = null;
+  private finaleDone = false;
+  private sleighReturn: Promise<void> = Promise.resolve();
 
   constructor(private readonly emit: (e: GameEvent) => void) {
     super("village");
@@ -111,6 +118,7 @@ export class VillageScene extends Phaser.Scene {
   create(): void {
     this.reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.state = getVillage();
+    this.finaleDone = isComplete(this.state);
     const sizes = sizesOf(BUILDING_META);
     const props = worldProps(sizes);
     this.grid = new Grid(obstacles(sizes, props));
@@ -535,6 +543,18 @@ export class VillageScene extends Phaser.Scene {
     const b = BUILDINGS[id];
     const m = BUILDING_META[id];
     const z = b.y + b.block[1] + b.block[3];
+    if (id === CHIMNEY_HOUSE && m.smoke) {
+      // on its way down the chimney: only the lid and bow still show
+      const [cx, cy] = [b.x + m.smoke[0], b.y + m.smoke[1] + 6];
+      const img = this.add
+        .image(cx, instant ? cy : cy - 5, `gifts/box-${wrap}.png`)
+        .setOrigin(0.5, 1)
+        .setCrop(0, 0, 11, 6)
+        .setDepth(z + 0.06);
+      if (!instant) this.tweens.add({ targets: img, y: cy, duration: 420, ease: "Quad.easeIn" });
+      this.houses.get(id)!.gift = img;
+      return img;
+    }
     const [gx, gy] = [b.x + m.gift[0], b.y + m.gift[1]];
     const img = this.add
       .image(gx, instant ? gy : gy - 6, `gifts/box-${wrap}.png`)
@@ -639,11 +659,15 @@ export class VillageScene extends Phaser.Scene {
     return best;
   }
 
-  private walk(goal: Pt, then?: () => void): boolean {
+  private walk(goal: Pt, then?: () => void, byPlayer = true): boolean {
     const path = this.grid.path([this.santa.x, this.santa.y], goal);
     if (!path) {
       this.toast(COPY.toast.unreachable);
       return false;
+    }
+    if (!byPlayer) {
+      this.santa.follow(path, then);
+      return true;
     }
     const end = path[path.length - 1]!;
     this.ring
@@ -682,13 +706,7 @@ export class VillageScene extends Phaser.Scene {
       this.toast(BUILDING_NAMES[id], BUILDING_NOTES[id]);
       return;
     }
-    if (isDelivered(s, id)) {
-      this.toast(HOUSE_NAMES[id], COPY.toast.already);
-      const b = BUILDINGS[id];
-      const m = BUILDING_META[id];
-      this.sparkles.explode(6, b.x + m.gift[0], b.y + m.gift[1] - 6);
-      return;
-    }
+    if (isDelivered(s, id)) return void this.openCard(id, false);
     if (!s.sack.length) return this.toast(COPY.toast.noGift, COPY.toast.noGiftBody);
     void (id === CHIMNEY_HOUSE ? this.chimneyDelivery(id) : this.doorDelivery(id));
   }
@@ -903,9 +921,7 @@ export class VillageScene extends Phaser.Scene {
     santa.idle();
     await this.lightHouse(id, false);
     this.refreshLamps(false);
-    this.toast(COPY.toast.delivered(HOUSE_NAMES[id], GIFTS[gift.giftId].name));
-    if (isComplete(getVillage())) await this.finale();
-    this.setBusy(false);
+    await this.openCard(id, true);
   }
 
   /** The door is snowed in: Rudolph flies Santa to the roof and the gift goes down the chimney. */
@@ -951,8 +967,8 @@ export class VillageScene extends Phaser.Scene {
       duration: 380,
       ease: "Quad.easeIn",
     });
-    await this.tween({ targets: box, scaleY: 0, scaleX: 0.6, y: chimney[1] + 2, duration: 160 });
     box.destroy();
+    this.placeGift(id, gift.wrapId, false);
     this.sparkles.explode(18, chimney[0], chimney[1]);
     const warm = this.add
       .image(chimney[0], chimney[1], "effects/glow-warm.png")
@@ -981,17 +997,11 @@ export class VillageScene extends Phaser.Scene {
     santa.setVisible(true);
     santa.setFull(getVillage().sack.length > 0);
     santa.face("e");
-    this.follow(santa.sprite);
-    this.toast(COPY.toast.delivered(HOUSE_NAMES[id], GIFTS[gift.giftId].name));
-    const home = sl.fly(SLEIGH_PARK, { cruise: 60, speed: 200 }).done.then(() => {
+    this.sleighReturn = sl.fly(SLEIGH_PARK, { cruise: 60, speed: 200 }).done.then(() => {
       sl.dir = 1;
       sl.park();
     });
-    if (isComplete(getVillage())) {
-      await home;
-      await this.finale();
-    }
-    this.setBusy(false);
+    await this.openCard(id, true);
   }
 
   private pan(x: number, y: number, ms: number): Promise<void> {
@@ -1008,6 +1018,7 @@ export class VillageScene extends Phaser.Scene {
 
   private async finale(): Promise<void> {
     const sl = this.sleigh;
+    await this.sleighReturn;
     await this.pan(TREE.x + 33, TREE.y + 64, 1400);
     this.lightTree(false);
     NEIGHBOURS.forEach((id) => void this.lightHouse(id, false));
@@ -1045,6 +1056,82 @@ export class VillageScene extends Phaser.Scene {
     this.santa.idle();
   }
 
+  // ---------------------------------------------------------------- the card
+
+  /**
+   * After a delivery (or when Santa revisits a served house): a few sparkles on
+   * the gift, a pause, the camera settles on the house, then the UI opens the card.
+   */
+  private async openCard(id: HouseId, fresh: boolean): Promise<void> {
+    this.setBusy(true);
+    this.cardHouse = id;
+    const b = BUILDINGS[id];
+    const m = BUILDING_META[id];
+    this.sparkles.explode(fresh ? 9 : 5, b.x + m.gift[0], b.y + m.gift[1] - 6);
+    if (fresh) await this.wait(this.reduced ? 0 : 700);
+    // the door line sits about a third of the way down, above the card editor
+    const view = this.cameras.main.worldView;
+    await this.pan(b.x + m.w / 2, b.y + m.door[1] + view.height * 0.16, 1000);
+    const d = getVillage().deliveries.find((x) => x.houseId === id);
+    if (!d) return this.endCard();
+    this.emit({ type: "card", houseId: id, giftId: d.giftId, wrapId: d.wrapId, fresh });
+  }
+
+  /** Santa slips away from the doorstep; then the postcard scene is rendered at 1:1. */
+  async leaveHouse(): Promise<{ image: HTMLImageElement; chill: number }> {
+    const id = this.cardHouse;
+    if (!id) throw new Error("No card in progress");
+    const frame = postcardFrame(id, BUILDING_META[id]);
+    const spot = this.leaveSpot(id, frame);
+    if (spot) await new Promise<void>((done) => this.walk(spot, done, false) || done());
+    this.santa.idle();
+    await this.pan(frame[0] + frame[2] / 2, frame[1] + frame[3] * 0.4, 900);
+    await this.wait(this.reduced ? 0 : 300);
+    const image = await snapshotRegion(this, frame);
+    return { image, chill: this.chill.alpha };
+  }
+
+  /** A few steps away from the door, on the side without the gift, inside the postcard. */
+  private leaveSpot(id: HouseId, [left, top]: Rect): Pt | null {
+    const m = BUILDING_META[id];
+    const [sx, sy] = doorStand(id, m);
+    const away = BUILDINGS[id].x + m.gift[0] >= sx ? -1 : 1;
+    const tries: Pt[] = [
+      [away * 48, 8],
+      [away * 36, 22],
+      [-away * 48, 8],
+      [-away * 36, 22],
+      [0, 26],
+    ];
+    for (const [dx, dy] of tries) {
+      const p: Pt = [sx + dx, sy + dy];
+      const inside =
+        p[0] > left + 16 && p[0] < left + POSTCARD.w - 16 && p[1] < top + POSTCARD.cardTop - 6;
+      if (!inside || !this.grid.walkable(p[0], p[1])) continue;
+      const path = this.grid.path([this.santa.x, this.santa.y], p);
+      if (!path) continue;
+      let len = 0;
+      let prev: Pt = [this.santa.x, this.santa.y];
+      for (const q of path) {
+        len += Math.hypot(q[0] - prev[0], q[1] - prev[1]);
+        prev = q;
+      }
+      if (len < 130) return p;
+    }
+    return null;
+  }
+
+  /** Back to the village (card finished, skipped or closed). */
+  endCard(): void {
+    if (!this.cardHouse) return;
+    this.cardHouse = null;
+    this.follow(this.santa.sprite);
+    if (isComplete(getVillage()) && !this.finaleDone) {
+      this.finaleDone = true;
+      void this.finale().then(() => this.setBusy(false));
+    } else this.setBusy(false);
+  }
+
   // ---------------------------------------------------------------- store sync
 
   private onStore(): void {
@@ -1075,6 +1162,8 @@ export class VillageScene extends Phaser.Scene {
     star.setScale(0.7);
     this.lightHouse("workshop", true);
     this.lamps.forEach((l) => (l.on = !this.lampWanted(l)));
+    this.finaleDone = false;
+    this.cardHouse = null;
     this.refreshLamps(true);
     this.santa.stop();
     this.santa.place(SPAWN);

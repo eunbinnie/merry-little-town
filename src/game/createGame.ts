@@ -27,6 +27,8 @@ export function createGame(parent: HTMLElement, emit: (e: GameEvent) => void): G
     skipIntro: () => scene.skipIntro(),
     goTo: (target) => scene.goTo(target),
     capture: () => scene.capture(),
+    leaveHouse: () => scene.leaveHouse(),
+    endCard: () => scene.endCard(),
     destroy: () => game.destroy(true),
   };
 }

@@ -2,7 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  BUILDINGS,
   BUILDING_IDS,
+  POSTCARD,
+  WORLD,
+  postcardFrame,
   SLEIGH_PICKUP,
   SPAWN,
   doorStand,
@@ -71,4 +75,17 @@ test("pathfinding across the whole map is fast", () => {
   const t0 = performance.now();
   for (let i = 0; i < 10; i++) grid.path([40, 860], [960, 240]);
   assert.ok((performance.now() - t0) / 10 < 40);
+});
+
+test("each house's postcard frames the whole house with the doorstep above the card", () => {
+  for (const id of HOUSE_IDS) {
+    const m = meta[id];
+    const b = BUILDINGS[id];
+    const [left, top, w, h] = postcardFrame(id, m);
+    assert.ok(left >= 0 && top >= 0 && left + w <= WORLD.w && top + h <= WORLD.h, `${id} in world`);
+    assert.ok(b.x >= left && b.x + m.w <= left + w, `${id} fits horizontally`);
+    assert.ok(b.y >= top, `${id} roof is inside the frame`);
+    for (const [, y] of [m.door, m.gift])
+      assert.ok(b.y + y - top < POSTCARD.cardTop - 4, `${id} doorstep stays above the card`);
+  }
 });
