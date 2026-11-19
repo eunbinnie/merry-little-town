@@ -22,6 +22,13 @@ export type SceneShot = { image: HTMLImageElement; chill: number };
 export type GameHandle = {
   skipIntro(): void;
   goTo(target: Destination): void;
+  /** Walk to the nearest house still waiting for a gift. */
+  goToNearest(): void;
+  zoomBy(dir: 1 | -1): void;
+  /** Glide the camera back to Santa and follow him again. */
+  recenter(): void;
+  /** Santa's position in world pixels (for the village map). */
+  santaAt(): readonly [number, number];
   capture(): Promise<SceneShot>;
   /** Santa slips away from the house of the open card; resolves with the postcard scene. */
   leaveHouse(): Promise<SceneShot>;

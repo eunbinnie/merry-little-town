@@ -26,6 +26,10 @@ export function createGame(parent: HTMLElement, emit: (e: GameEvent) => void): G
   return {
     skipIntro: () => scene.skipIntro(),
     goTo: (target) => scene.goTo(target),
+    goToNearest: () => scene.goToNearest(),
+    zoomBy: (dir) => scene.zoomBy(dir),
+    recenter: () => scene.recenter(),
+    santaAt: () => scene.santaAt(),
     capture: () => scene.capture(),
     leaveHouse: () => scene.leaveHouse(),
     endCard: () => scene.endCard(),

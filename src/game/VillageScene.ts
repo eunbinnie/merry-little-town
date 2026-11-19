@@ -50,6 +50,7 @@ import {
   type Strand,
 } from "./world";
 import { Grid } from "./grid";
+import { CameraZoom } from "./CameraZoom";
 import { Santa, createSantaAnims } from "./Santa";
 import { Sleigh, createSleighAnims } from "./Sleigh";
 import { UI_FLAG, snapshotRegion } from "./capture";
@@ -140,6 +141,13 @@ export class VillageScene extends Phaser.Scene {
   private festoons: Lights[] = [];
   private flames: Img[] = [];
   private wind = 0;
+  private zoom!: CameraZoom;
+  /** The camera let go of Santa (zoomed toward another spot) until he walks or is recentred. */
+  private free = false;
+  private arrowGift!: Img;
+  /** The house the guidance points at: the nearest one still waiting. */
+  private guide: HouseId | null = null;
+  private guideAt = 0;
 
   constructor(private readonly emit: (e: GameEvent) => void) {
     super("village");
@@ -171,8 +179,15 @@ export class VillageScene extends Phaser.Scene {
 
     const cam = this.cameras.main;
     cam.setBounds(0, 0, WORLD.w, WORLD.h).setBackgroundColor(SKY_TOP).setRoundPixels(true);
-    this.fitZoom();
-    this.scale.on(Phaser.Scale.Events.RESIZE, this.fitZoom, this);
+    this.zoom = new CameraZoom(this, {
+      canZoom: () => this.state.started && !this.busy && !this.intro,
+      tracking: () => this.santa.moving || this.keyboardMoving,
+      release: () => {
+        this.cameras.main.stopFollow();
+        this.free = true;
+      },
+    });
+    this.scale.on(Phaser.Scale.Events.RESIZE, () => this.zoom.fit());
 
     this.buildSky();
     this.add.image(0, GROUND_Y, "world/ground.png").setOrigin(0).setDepth(-500);
@@ -223,6 +238,9 @@ export class VillageScene extends Phaser.Scene {
     this.arrow = this.ui(
       this.add.image(0, 0, "effects/marker.png").setDepth(9900).setVisible(false),
     );
+    this.arrowGift = this.ui(
+      this.add.image(0, 0, "gifts/box-crimson.png").setDepth(9900).setVisible(false),
+    );
     this.chill = this.add
       .rectangle(0, 0, 8000, 8000, 0x0a101d)
       .setScrollFactor(0)
@@ -260,11 +278,6 @@ export class VillageScene extends Phaser.Scene {
   private ui<T extends Phaser.GameObjects.GameObject>(o: T): T {
     o.setData(UI_FLAG, true);
     return o;
-  }
-
-  private fitZoom(): void {
-    const { width, height } = this.scale.gameSize;
-    this.cameras.main.setZoom(Math.max(2, Math.round(Math.min(width, height) / 280)));
   }
 
   private buildSky(): void {
@@ -712,6 +725,7 @@ export class VillageScene extends Phaser.Scene {
 
   private onPointer(p: Phaser.Input.Pointer): void {
     this.lastInputKeyboard = false;
+    if (this.zoom.swallowTap(p)) return; // the end of a pinch or a drag is not a tap
     if (!this.state.started || this.busy || this.intro) return;
     const target = this.targetAt(p.worldX, p.worldY);
     if (target) return this.goToTarget(target);
@@ -827,12 +841,55 @@ export class VillageScene extends Phaser.Scene {
       ease: "Quad.easeOut",
     });
     this.santa.follow(path, then);
+    if (this.free) this.follow(this.santa.sprite); // walking brings the camera back to Santa
     this.emit({ type: "moved" });
     return true;
   }
 
   private goToTarget(t: Target): void {
     this.walk(this.standOf(t), () => this.interact(t));
+  }
+
+  // ---------------------------------------------------------------- camera & guidance (public)
+
+  zoomBy(dir: 1 | -1): void {
+    this.zoom.zoomBy(dir);
+  }
+
+  /** Back to Santa: the camera glides over and follows him again. */
+  recenter(): void {
+    if (this.state.started && !this.busy && !this.intro) this.follow(this.santa.sprite);
+  }
+
+  santaAt(): Pt {
+    return [this.santa.x, this.santa.y];
+  }
+
+  /** Walk to the closest house still waiting for a gift (by walking distance). */
+  goToNearest(): void {
+    if (!this.state.started || this.busy || this.intro) return;
+    const best = this.nearestHouse();
+    if (!best) return this.toast(COPY.toast.unreachable);
+    this.guide = best;
+    this.goToTarget({ kind: "building", id: best });
+  }
+
+  private nearestHouse(): HouseId | null {
+    let best: HouseId | null = null;
+    let bestLen = Infinity;
+    for (const id of HOUSE_IDS) {
+      if (isDelivered(this.state, id)) continue;
+      const path = this.grid.path([this.santa.x, this.santa.y], doorStand(id, BUILDING_META[id]));
+      if (!path) continue;
+      let len = 0;
+      let prev: Pt = [this.santa.x, this.santa.y];
+      for (const q of path) {
+        len += Math.hypot(q[0] - prev[0], q[1] - prev[1]);
+        prev = q;
+      }
+      if (len < bestLen) [best, bestLen] = [id, len];
+    }
+    return best;
   }
 
   private interact(t: Target): void {
@@ -876,6 +933,7 @@ export class VillageScene extends Phaser.Scene {
   }
 
   private follow(target: Phaser.GameObjects.Sprite, lerp = 0.14): void {
+    this.free = false;
     this.cameras.main.startFollow(target, true, lerp, lerp);
   }
 
@@ -1345,6 +1403,7 @@ export class VillageScene extends Phaser.Scene {
       }
       if (dx || dy) {
         santa.nudge(dx, dy, dt);
+        if (this.free) this.follow(santa.sprite);
         if (!this.keyboardMoving) this.emit({ type: "moved" });
         this.keyboardMoving = true;
       } else if (this.keyboardMoving) {
@@ -1359,6 +1418,7 @@ export class VillageScene extends Phaser.Scene {
       dispatch({ type: "rest", pos: [Math.round(santa.x), Math.round(santa.y)] });
     this.wasMoving = moving;
 
+    this.zoom.tick();
     this.updateBells(dt);
     this.updateAmbience();
     this.updateMarkers();
@@ -1458,45 +1518,60 @@ export class VillageScene extends Phaser.Scene {
       const show =
         carrying &&
         !isDelivered(this.state, id) &&
-        Math.hypot(x - this.santa.x, y - this.santa.y) < 170;
+        (id === this.guide || Math.hypot(x - this.santa.x, y - this.santa.y) < 170);
       h.marker!.setVisible(show);
     }
   }
 
-  /** Points at the sleigh when the sack is empty (or the tree once done) if it's off-screen. */
+  /**
+   * One quiet pointer at the screen's edge toward the next goal when it's off
+   * screen: the sleigh while the sack is empty, otherwise the nearest house
+   * still waiting (by walking distance, rechecked every 1.5 s). Nothing once
+   * the village is complete.
+   */
   private updateArrow(): void {
     const s = this.state;
     let target: Pt | null = null;
-    if (s.started && !this.busy && !this.intro) {
-      if (!s.sack.length && giftsLeftToLoad(s) > 0) target = SLEIGH_PICKUP;
-      else if (isComplete(s)) target = TREE_STAND;
+    let house = false;
+    if (s.started && !this.busy && !this.intro && !isComplete(s)) {
+      if (s.sack.length) {
+        const stale = this.guide && isDelivered(s, this.guide);
+        if (stale || this.time.now - this.guideAt > 1500) {
+          this.guideAt = this.time.now;
+          this.guide = this.nearestHouse();
+        }
+        if (this.guide) [target, house] = [doorStand(this.guide, BUILDING_META[this.guide]), true];
+      } else if (giftsLeftToLoad(s) > 0) target = SLEIGH_PICKUP;
     }
-    const v = this.cameras.main.worldView;
-    const inset = 12;
-    if (
-      !target ||
-      (target[0] > v.x + inset &&
-        target[0] < v.right - inset &&
-        target[1] > v.y + inset &&
-        target[1] < v.bottom - inset)
-    ) {
+    const cam = this.cameras.main;
+    const v = cam.worldView;
+    const z = cam.zoom;
+    // keep clear of the HUD (top), the hint (bottom) and the side buttons, in screen pixels
+    const [l, r, t, b] = [26 / z, 70 / z, 132 / z, 104 / z];
+    const inner = new Phaser.Geom.Rectangle(v.x + l, v.y + t, v.width - l - r, v.height - t - b);
+    if (!target || inner.width <= 0 || inner.height <= 0 || inner.contains(target[0], target[1])) {
       this.arrow.setVisible(false);
+      this.arrowGift.setVisible(false);
       return;
     }
-    const cx = v.centerX;
-    const cy = v.centerY;
+    const cx = inner.centerX;
+    const cy = inner.centerY;
     const a = Math.atan2(target[1] - cy, target[0] - cx);
-    const hw = v.width / 2 - inset;
-    const hh = v.height / 2 - inset;
-    const k = Math.min(hw / Math.abs(Math.cos(a) || 1e-6), hh / Math.abs(Math.sin(a) || 1e-6));
-    const bob = Math.sin(this.time.now / 220) * 1.5;
+    const k = Math.min(
+      inner.width / 2 / Math.abs(Math.cos(a) || 1e-6),
+      inner.height / 2 / Math.abs(Math.sin(a) || 1e-6),
+    );
+    const scale = Math.max(1, Math.round(3 / z));
+    const bob = (Math.sin(this.time.now / 220) * 1.5) / z;
+    const at = (d: number): [number, number] => [cx + Math.cos(a) * d, cy + Math.sin(a) * d];
+    const [ax, ay] = at(k - bob);
     this.arrow
       .setVisible(true)
-      .setPosition(
-        Math.round(cx + Math.cos(a) * (k - bob)),
-        Math.round(cy + Math.sin(a) * (k - bob)),
-      )
+      .setScale(scale)
+      .setPosition(ax, ay)
       .setRotation(a - Math.PI / 2);
+    const [gx, gy] = at(k - (12 * scale) / z - bob);
+    this.arrowGift.setVisible(house).setScale(scale).setPosition(gx, gy);
   }
 
   // ---------------------------------------------------------------- photo
