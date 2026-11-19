@@ -23,13 +23,16 @@ pnpm assets:generate   # regenerate every sprite, the ground, the OG image and t
 
 ## How to play
 
-| Input                     | What it does                                                                 |
-| ------------------------- | ---------------------------------------------------------------------------- |
-| Tap / click the snow      | Santa walks there (A\* around buildings, trees, fences and the frozen water) |
-| Tap a house, sleigh, tree | Santa walks to it and acts: load gifts, place a gift, or look around         |
-| Arrow keys / WASD         | Walk directly                                                                |
-| Space / Enter             | Act on whatever Santa is standing next to                                    |
-| Hidden "바로 가기" list   | Tab into it for keyboard and screen-reader access to every destination       |
+| Input                     | What it does                                                                  |
+| ------------------------- | ----------------------------------------------------------------------------- |
+| Tap / click the snow      | Santa walks there (A\* around buildings, trees, fences and the frozen water)  |
+| Tap a house, sleigh, tree | Santa walks to it and acts: load gifts, place a gift, or look around          |
+| Arrow keys / WASD         | Walk directly                                                                 |
+| Space / Enter             | Act on whatever Santa is standing next to                                     |
+| Mouse wheel / pinch       | Zoom (trackpad pinch and two-finger pinch on phones too); +/− buttons as well |
+| Map button                | The whole village: tap a house, then 찾아가기, and Santa walks there          |
+| 가까운 집 찾기 / ◎        | Walk to the nearest house still waiting / bring the camera back to Santa      |
+| Hidden "바로 가기" list   | Tab into it for keyboard and screen-reader access to every destination        |
 
 - **Gifts.** The sack holds three wrapped gifts. At the sleigh they pop out of the cargo, open, and drop into the sack. All seven houses get a different gift.
 - **Deliveries.** Six houses get a doorstep delivery: Santa puts the gift down, the windows light up and the decorations appear. The townhouse door is snowed in, so Rudolph flies Santa up to the chimney, and the present stays visible sticking out of the chimney top.
