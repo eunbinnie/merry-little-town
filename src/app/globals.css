@@ -508,3 +508,59 @@ body {
     transition-duration: 1ms !important;
   }
 }
+
+/* village map ------------------------------------------------------------ */
+.map-spot {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  transform: translate(-50%, -50%);
+  color: var(--color-ivory);
+  background: rgb(16 24 39 / 0.6);
+  box-shadow: inset 0 0 0 2px rgb(247 241 229 / 0.45);
+  cursor: pointer;
+}
+.map-spot[data-state="waiting"] {
+  box-shadow: inset 0 0 0 2px var(--color-glow);
+}
+.map-spot[data-state="done"] {
+  color: var(--color-glow);
+  background: rgb(16 24 39 / 0.4);
+}
+.map-spot[data-state="place"] {
+  width: auto;
+  height: 24px;
+  padding: 0 6px;
+}
+.map-spot[data-selected] {
+  outline: 3px solid var(--color-ivory);
+  outline-offset: 2px;
+  background: rgb(244 207 131 / 0.35);
+}
+.map-spot:focus-visible {
+  outline: 3px solid var(--color-ivory);
+  outline-offset: 2px;
+}
+.map-santa {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--color-berry);
+  box-shadow: 0 0 0 2px var(--color-ivory);
+  pointer-events: none;
+}
+.map-santa span {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--color-ivory);
+  text-shadow: 0 1px 0 #0a101d;
+}

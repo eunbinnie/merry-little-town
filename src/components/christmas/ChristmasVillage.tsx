@@ -24,6 +24,9 @@ import { CardEditor } from "@/components/card/CardEditor";
 import { PostcardSheet } from "@/components/card/PostcardSheet";
 import { duckMusic, playSound, unlockSound } from "@/audio/sound";
 import { SoundMenu, SoundToggle, useSoundUnlock } from "./SoundControl";
+import { ControlsGuide, NavControls, VillageMap } from "./Navigation";
+import { loadView, saveView } from "@/lib/storage/view-storage";
+import type { Pt } from "@/game/world";
 
 const TOTAL = HOUSE_IDS.length;
 const asset = (rel: string) => `${ASSET_ROOT}/${rel}`;
@@ -83,6 +86,9 @@ export function ChristmasVillage() {
   const [card, setCard] = useState<Card | null>(null);
   const [shareStatus, setShareStatus] = useState("");
   const restartRef = useRef<HTMLDialogElement>(null);
+  const [mapAt, setMapAt] = useState<Pt | null>(null); // Santa's spot when the map was opened
+  // the guide only shows while playing, never in the server HTML
+  const [guided, setGuided] = useState(() => typeof window === "undefined" || loadView().guided);
 
   // Phaser is loaded only in the browser, once; React state never recreates it
   useEffect(() => {
@@ -252,6 +258,7 @@ export function ChristmasVillage() {
   };
 
   const go = (d: Destination) => game.current?.goTo(d);
+  const closeMap = useCallback(() => setMapAt(null), []);
 
   return (
     <main className="fixed inset-0 overflow-hidden bg-night">
@@ -462,6 +469,32 @@ export function ChristmasVillage() {
             </ul>
           </nav>
 
+          <NavControls
+            disabled={busy}
+            onMap={() => game.current && setMapAt([...game.current.santaAt()] as Pt)}
+            onZoom={(dir) => game.current?.zoomBy(dir)}
+            onRecenter={() => game.current?.recenter()}
+          />
+          {!guided && (
+            <ControlsGuide
+              onClose={() => {
+                setGuided(true);
+                saveView({ guided: true });
+              }}
+            />
+          )}
+          {mapAt && (
+            <VillageMap
+              delivered={new Set(deliveries.map((d) => d.houseId))}
+              santa={mapAt}
+              onGo={(dest) => {
+                setMapAt(null);
+                go(dest);
+              }}
+              onClose={closeMap}
+            />
+          )}
+
           {toast && (
             <div
               key={toast.id}
@@ -507,6 +540,16 @@ export function ChristmasVillage() {
                     <p className="mt-0.5 hidden text-xs text-ivory/60 pointer-fine:block">
                       {COPY.hint.moveKeys}
                     </p>
+                  )}
+                  {hint === COPY.hint.deliver && (
+                    <button
+                      type="button"
+                      className="pointer-events-auto mt-1 min-h-9 px-2 text-xs font-bold text-glow underline-offset-4 hover:underline disabled:opacity-50"
+                      onClick={() => game.current?.goToNearest()}
+                      disabled={busy}
+                    >
+                      {COPY.nav.nearest}
+                    </button>
                   )}
                 </div>
               )}
