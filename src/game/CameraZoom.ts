@@ -1,4 +1,4 @@
-// Zooming the village: mouse wheel, trackpad pinch (ctrl+wheel, or Safari's
+// Looking around the village: drag to pan (mouse or one finger), and zoom with the mouse wheel, trackpad pinch (ctrl+wheel, or Safari's
 // gesture events), two-finger pinch on touch screens and the zoom buttons.
 // While a gesture runs the zoom follows it continuously; when it ends the
 // camera eases to the nearest whole zoom, where every art pixel is the same
@@ -16,7 +16,7 @@ type Hooks = {
   release(): void;
 };
 
-const SLOP = 12; // px a finger may wander and still count as a tap
+const SLOP = 10; // screen px a pointer may wander and still count as a tap
 
 export class CameraZoom {
   private base = 2;
@@ -30,6 +30,10 @@ export class CameraZoom {
   private safari: { z0: number } | null = null;
   /** A second finger joined this touch; nothing in it may count as a tap. */
   private multi = false;
+  /** Dragging the map: the last screen position of the dragging pointer. */
+  private pan: { id: number; x: number; y: number } | null = null;
+  /** This press turned into a drag; its release is not a tap. */
+  private dragged = false;
   private readonly cam: Phaser.Cameras.Scene2D.Camera;
 
   constructor(
@@ -168,8 +172,12 @@ export class CameraZoom {
 
   private onDown(): void {
     const f = this.fingers();
-    if (!f) return;
+    if (!f) {
+      this.dragged = false;
+      return;
+    }
     this.multi = true; // this touch is now a pinch, never a tap
+    this.endPan();
     if (!this.hooks.canZoom()) return;
     this.settleTween?.stop();
     this.pinch = {
@@ -178,11 +186,45 @@ export class CameraZoom {
     };
   }
 
-  private onMove(): void {
+  private onMove(p: Phaser.Input.Pointer): void {
     const f = this.fingers();
-    if (!f || !this.pinch) return;
+    if (!f) return this.drag(p);
+    if (!this.pinch) return;
     const d = Phaser.Math.Distance.Between(f[0].x, f[0].y, f[1].x, f[1].y);
     this.zoomAt(this.pinch.z0 * (d / this.pinch.d0), (f[0].x + f[1].x) / 2, (f[0].y + f[1].y) / 2);
+  }
+
+  /**
+   * One pointer held down and moved past the tap slop pans the camera, in
+   * screen pixels (so it feels the same at every zoom). Santa stays put.
+   */
+  private drag(p: Phaser.Input.Pointer): void {
+    if (!p.isDown || this.multi || this.pinch) return;
+    if (!this.pan) {
+      if (Phaser.Math.Distance.Between(p.downX, p.downY, p.x, p.y) <= SLOP) return;
+      this.dragged = true;
+      if (!this.hooks.canZoom()) return;
+      this.settleTween?.stop();
+      this.hooks.release();
+      this.pan = { id: p.id, x: p.x, y: p.y };
+      this.scene.input.setDefaultCursor("grabbing");
+      return;
+    }
+    if (p.id !== this.pan.id) return;
+    const cam = this.cam;
+    cam.setScroll(
+      cam.scrollX - (p.x - this.pan.x) / cam.zoom,
+      cam.scrollY - (p.y - this.pan.y) / cam.zoom,
+    );
+    this.pan.x = p.x;
+    this.pan.y = p.y;
+  }
+
+  /** The camera stays where the drag left it (Phaser keeps it inside the map bounds). */
+  private endPan(): void {
+    if (!this.pan) return;
+    this.pan = null;
+    this.scene.input.setDefaultCursor("");
   }
 
   /** Called every frame: ends a pinch once a finger lifts (or the touch is cancelled). */
@@ -194,11 +236,17 @@ export class CameraZoom {
     }
     if (this.multi && !this.scene.input.pointer1.isDown && !this.scene.input.pointer2.isDown)
       this.multi = false;
+    // the drag ends when its pointer lifts, is cancelled, or leaves the window
+    if (
+      this.pan &&
+      !this.scene.input.manager.pointers.some((q) => q.id === this.pan!.id && q.isDown)
+    )
+      this.endPan();
   }
 
   /** Whether a released pointer should be ignored as a tap (part of a pinch, or a drag). */
   swallowTap(p: Phaser.Input.Pointer): boolean {
-    if (this.multi || this.pinch) return true;
+    if (this.multi || this.pinch || this.dragged || this.pan) return true;
     return Phaser.Math.Distance.Between(p.downX, p.downY, p.upX, p.upY) > SLOP;
   }
 }
