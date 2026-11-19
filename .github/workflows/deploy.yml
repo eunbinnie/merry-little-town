@@ -16,6 +16,8 @@ concurrency:
 
 jobs:
   build:
+    # Pages is only enabled on the personal fork; skip on other copies
+    if: github.repository == 'eunbinnie/merry-little-town'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
