@@ -145,6 +145,8 @@ export class VillageScene extends Phaser.Scene {
   /** The camera let go of Santa (zoomed toward another spot) until he walks or is recentred. */
   private free = false;
   private arrowGift!: Img;
+  /** Where the edge pointer sits on screen, so a tap on it can send Santa there. */
+  private arrowAt: { at: Pt; house: boolean } | null = null;
   /** The house the guidance points at: the nearest one still waiting. */
   private guide: HouseId | null = null;
   private guideAt = 0;
@@ -236,10 +238,18 @@ export class VillageScene extends Phaser.Scene {
 
     this.ring = this.ui(this.add.image(0, 0, "effects/tap.png").setDepth(-450).setVisible(false));
     this.arrow = this.ui(
-      this.add.image(0, 0, "effects/marker.png").setDepth(9900).setVisible(false),
+      this.add
+        .image(0, 0, "effects/marker.png")
+        .setDepth(9900)
+        .setScrollFactor(0)
+        .setVisible(false),
     );
     this.arrowGift = this.ui(
-      this.add.image(0, 0, "gifts/box-crimson.png").setDepth(9900).setVisible(false),
+      this.add
+        .image(0, 0, "gifts/box-crimson.png")
+        .setDepth(9900)
+        .setScrollFactor(0)
+        .setVisible(false),
     );
     this.chill = this.add
       .rectangle(0, 0, 8000, 8000, 0x0a101d)
@@ -727,6 +737,10 @@ export class VillageScene extends Phaser.Scene {
     this.lastInputKeyboard = false;
     if (this.zoom.swallowTap(p)) return; // the end of a pinch or a drag is not a tap
     if (!this.state.started || this.busy || this.intro) return;
+    // tapping the edge pointer walks Santa to what it points at
+    const arrow = this.arrowAt;
+    if (arrow && Math.hypot(p.x - arrow.at[0], p.y - arrow.at[1]) < 30)
+      return arrow.house ? this.goToNearest() : this.goToTarget({ kind: "sleigh" });
     const target = this.targetAt(p.worldX, p.worldY);
     if (target) return this.goToTarget(target);
     const goal = this.grid.nearest(p.worldX, p.worldY);
@@ -1543,35 +1557,51 @@ export class VillageScene extends Phaser.Scene {
         if (this.guide) [target, house] = [doorStand(this.guide, BUILDING_META[this.guide]), true];
       } else if (giftsLeftToLoad(s) > 0) target = SLEIGH_PICKUP;
     }
+    // Drawn in screen space (scroll factor 0), so it sits still at the edge
+    // while the camera glides: no per-frame wobble.
     const cam = this.cameras.main;
-    const v = cam.worldView;
     const z = cam.zoom;
-    // keep clear of the HUD (top), the hint (bottom) and the side buttons, in screen pixels
-    const [l, r, t, b] = [26 / z, 70 / z, 132 / z, 104 / z];
-    const inner = new Phaser.Geom.Rectangle(v.x + l, v.y + t, v.width - l - r, v.height - t - b);
-    if (!target || inner.width <= 0 || inner.height <= 0 || inner.contains(target[0], target[1])) {
+    const [W, H] = [cam.width, cam.height];
+    // keep clear of the HUD (top), the hint (bottom) and the side buttons
+    const inner = new Phaser.Geom.Rectangle(26, 132, W - 26 - 70, H - 132 - 104);
+    const ts: Pt | null = target && [
+      (target[0] - cam.midPoint.x) * z + W / 2,
+      (target[1] - cam.midPoint.y) * z + H / 2,
+    ];
+    // only for goals that are really off screen; a 16 px band either side of
+    // the edge stops it flickering on and off as the camera glides
+    const m = this.arrowAt ? -16 : 16;
+    const offscreen = ts && (ts[0] < -m || ts[1] < -m || ts[0] > W + m || ts[1] > H + m);
+    if (!ts || !offscreen || inner.width <= 0 || inner.height <= 0) {
       this.arrow.setVisible(false);
       this.arrowGift.setVisible(false);
+      this.arrowAt = null;
       return;
     }
-    const cx = inner.centerX;
-    const cy = inner.centerY;
-    const a = Math.atan2(target[1] - cy, target[0] - cx);
+    const a = Math.atan2(ts[1] - inner.centerY, ts[0] - inner.centerX);
     const k = Math.min(
       inner.width / 2 / Math.abs(Math.cos(a) || 1e-6),
       inner.height / 2 / Math.abs(Math.sin(a) || 1e-6),
     );
-    const scale = Math.max(1, Math.round(3 / z));
-    const bob = (Math.sin(this.time.now / 220) * 1.5) / z;
-    const at = (d: number): [number, number] => [cx + Math.cos(a) * d, cy + Math.sin(a) * d];
-    const [ax, ay] = at(k - bob);
+    const at = (d: number): Pt => [
+      Math.round(inner.centerX + Math.cos(a) * d),
+      Math.round(inner.centerY + Math.sin(a) * d),
+    ];
+    // scroll-factor-0 objects are still zoomed about the screen centre
+    const place = ([sx, sy]: Pt): Pt => [W / 2 + (sx - W / 2) / z, H / 2 + (sy - H / 2) / z];
+    const scale = 3 / z; // one art pixel = 3 screen pixels at any zoom
+    const tip = at(k);
     this.arrow
       .setVisible(true)
       .setScale(scale)
-      .setPosition(ax, ay)
+      .setPosition(...place(tip))
       .setRotation(a - Math.PI / 2);
-    const [gx, gy] = at(k - (12 * scale) / z - bob);
-    this.arrowGift.setVisible(house).setScale(scale).setPosition(gx, gy);
+    const box = at(k - 34);
+    this.arrowGift
+      .setVisible(house)
+      .setScale(scale)
+      .setPosition(...place(box));
+    this.arrowAt = { at: house ? box : tip, house };
   }
 
   // ---------------------------------------------------------------- photo
