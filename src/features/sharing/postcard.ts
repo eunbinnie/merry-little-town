@@ -1,7 +1,7 @@
 // 9:16 Christmas card built from a 1:1 render of the village around Santa
 // (180×320 art pixels, scaled 6× to 1080×1920), framed with a greeting.
 import { COPY } from "@/constants/copy";
-import { ASSET_ROOT } from "@/game/world";
+import { ASSET_ROOT, BASE_PATH } from "@/game/world";
 import type { Delivery } from "@/features/village/game";
 
 const W = 1080;
@@ -129,7 +129,7 @@ export function downloadBlob(blob: Blob, name = POSTCARD_FILENAME): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-const siteUrl = () => window.location.origin + "/";
+const siteUrl = () => `${window.location.origin}${BASE_PATH}/`;
 
 export async function copyLink(): Promise<boolean> {
   try {

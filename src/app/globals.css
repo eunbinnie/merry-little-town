@@ -297,7 +297,8 @@ body {
   width: min(100%, 420px);
   padding: 30px 30px 20px;
   color: var(--ink);
-  background: #f5e8ca url("/assets/christmas/ui/paper.png");
+  /* relative, so the bundler emits it under the deploy base path */
+  background: #f5e8ca url("../../public/assets/christmas/ui/paper.png");
   background-size: 96px;
   image-rendering: pixelated;
   box-shadow:

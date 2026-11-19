@@ -11,7 +11,7 @@ Requires Node ≥ 22.18. The asset script and the tests run TypeScript natively,
 ```bash
 pnpm install
 pnpm dev               # http://localhost:3000
-pnpm build && pnpm start
+pnpm build && pnpm start   # static export to out/, served locally
 pnpm lint              # ESLint
 pnpm typecheck         # tsc --noEmit (strict)
 pnpm test              # node:test: game rules, save migration, map walkability, card text
@@ -163,9 +163,12 @@ tests/                      rules, migration and map tests
 
 ## Deployment
 
-The app is fully static: every route is prerendered. On **Vercel**, import the repository with the default Next.js settings. No environment variables are required. `metadataBase` uses `VERCEL_PROJECT_PRODUCTION_URL` automatically. You can override it with `NEXT_PUBLIC_SITE_URL`, which other hosts need for absolute OG image URLs.
+The app is a static export (`output: "export"`): `pnpm build` writes the whole site to `out/`.
 
-For any other static host, add `output: "export"` to `next.config.ts` and upload `out/`.
+- **GitHub Pages.** `.github/workflows/deploy.yml` builds and deploys on every push to `main`. In the repository settings, Pages must use "GitHub Actions" as its source.
+  - The site lives at `https://<user>.github.io/<repo>/`. The workflow passes `/<repo>` as `PAGES_BASE_PATH`, so pages, sprites, fonts, the card paper texture, the canvas images and the share link all resolve under it.
+  - Locally the base path stays empty, so `pnpm dev` is unchanged.
+- **Other static hosts.** Upload `out/`. Set `NEXT_PUBLIC_SITE_URL` to the site origin for absolute OG image URLs.
 
 ## Known limitations
 

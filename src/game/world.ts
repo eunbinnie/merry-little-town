@@ -5,7 +5,9 @@
 export type Pt = readonly [number, number];
 export type Rect = readonly [number, number, number, number]; // x, y, w, h
 
-export const ASSET_ROOT = "/assets/christmas";
+/** "" locally, "/<repo>" on GitHub Pages (set by next.config.ts at build time). */
+export const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+export const ASSET_ROOT = `${BASE_PATH}/assets/christmas`;
 export const WORLD = { w: 1024, h: 896 } as const;
 /** Top edge of the painted ground image; the sky band sits above it. */
 export const GROUND_Y = 166;
