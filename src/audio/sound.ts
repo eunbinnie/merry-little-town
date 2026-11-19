@@ -53,6 +53,15 @@ let voices = 0;
 const perSound = new Map<SoundName, number>();
 const ducks = new Map<string, number>();
 let suspendTimer = 0;
+/** Where the music loop was started, so a reopened context can pick it up mid-tune. */
+let musicStart = 0;
+let musicOffset = 0;
+/**
+ * The page went to the background. Phones (iOS Safari especially) can cut the
+ * audio output then while the context still claims to be running, so the
+ * first tap after coming back opens a fresh one.
+ */
+let away = false;
 let chimeTimer = 0;
 
 const hidden = () => document.visibilityState === "hidden";
@@ -85,20 +94,14 @@ export function setSoundPrefs(patch: Partial<SoundPrefs>): void {
 /** From a user gesture: create (once) or resume the AudioContext. No-op when sound is off. */
 export function unlockSound(): void {
   if (!getSoundPrefs().on || hidden()) return;
-  if (ctx?.state === "running") return;
+  if (ctx?.state === "running" && !away) return;
+  if (ctx && away) reopen();
   if (!ctx) {
-    const AC =
-      window.AudioContext ??
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AC) return;
-    ctx = new AC({ latencyHint: "interactive" });
-    bus = buses(ctx);
-    // iOS: a silent blip inside the gesture fully opens the output
-    const blip = ctx.createBufferSource();
-    blip.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
-    blip.connect(ctx.destination);
-    blip.start();
-    document.addEventListener("visibilitychange", apply);
+    if (!open()) return;
+    document.addEventListener("visibilitychange", () => {
+      if (hidden()) away = true;
+      apply();
+    });
   }
   if (!rendering) {
     rendering = true;
@@ -108,6 +111,44 @@ export function unlockSound(): void {
     }).catch((e: unknown) => console.warn("Sound rendering stopped; the village stays quiet.", e));
   }
   apply();
+}
+
+/** A new AudioContext with its buses, created inside a user gesture. */
+function open(): boolean {
+  const AC =
+    window.AudioContext ??
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AC) return false;
+  ctx = new AC({ latencyHint: "interactive" });
+  bus = buses(ctx);
+  // iOS: a silent blip inside the gesture fully opens the output
+  const blip = ctx.createBufferSource();
+  blip.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+  blip.connect(ctx.destination);
+  blip.start();
+  return true;
+}
+
+/**
+ * Back from another app: close the old context and open a new one in this
+ * gesture. The rendered sounds are plain buffers and carry over; the music
+ * continues from where it was.
+ */
+function reopen(): void {
+  const old = ctx!;
+  const m = bank.music?.[0];
+  musicOffset = musicSrc && m ? Math.max(0, old.currentTime - musicStart) % m.duration : 0;
+  void old.close().catch(() => undefined);
+  ctx = null;
+  bus = null;
+  musicSrc = null;
+  windOn = false;
+  bells = null;
+  bellsLevel = 0;
+  voices = 0;
+  perSound.clear();
+  away = false;
+  open();
 }
 
 function buses(c: AudioContext): Buses {
@@ -156,7 +197,8 @@ function startLoops(c: AudioContext, b: Buses): void {
     musicSrc.buffer = m;
     musicSrc.loop = true;
     musicSrc.connect(b.music);
-    musicSrc.start(c.currentTime + 0.4);
+    musicSrc.start(c.currentTime + 0.4, musicOffset);
+    musicStart = c.currentTime + 0.4 - musicOffset;
   }
   if (!windOn) {
     windOn = true;
@@ -235,9 +277,11 @@ function voice(out: AudioNode, name: SoundName, o: PlayOpts): void {
   src.connect(g).connect(out);
   perSound.set(name, n + 1);
   voices++;
+  const owner = ctx;
   src.onended = () => {
     src.disconnect();
     g.disconnect();
+    if (owner !== ctx) return; // from a context that was replaced
     perSound.set(name, (perSound.get(name) ?? 1) - 1);
     voices--;
   };
