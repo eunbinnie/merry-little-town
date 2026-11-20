@@ -16,6 +16,9 @@ type Props = {
   onClose: () => void;
   closeLabel: string;
   onCopyLink: () => void;
+  linkLabel?: string;
+  /** A quiet line under the link, e.g. who can read what the link carries. */
+  note?: string;
 };
 
 /** The finished image is the hero: the exact PNG that gets saved or shared. */
@@ -79,8 +82,9 @@ export function PostcardSheet(p: Props) {
         className="ui-shadow text-xs text-ivory/60 underline-offset-4 hover:underline"
         onClick={p.onCopyLink}
       >
-        {COPY.card.copyLink}
+        {p.linkLabel ?? COPY.card.copyLink}
       </button>
+      {p.note && <p className="ui-shadow -mt-1 text-center text-[11px] text-ivory/50">{p.note}</p>}
     </div>
   );
 }

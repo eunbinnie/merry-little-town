@@ -14,6 +14,16 @@ export const COPY = {
     description: "오늘 밤, 당신이 산타예요.",
     cta: "썰매 타고 출발하기",
   },
+  /** Arriving from someone's card link. */
+  received: {
+    titleLines: (to: string) => [`${to}에게`, "크리스마스 카드가 도착했어요"],
+    from: (from: string) => (from ? `From. ${from}` : "익명의 산타가 보냈어요"),
+    cta: "선물 열어보기",
+    title: "문 앞에 선물이 놓여 있었어요.",
+    body: (from: string) => (from ? `${from}님이 두고 간 카드예요.` : "누군가 두고 간 카드예요."),
+    anonymous: "익명의 산타",
+    reply: "나도 산타 되기",
+  },
   intro: { skip: "건너뛰기" },
   hud: {
     progress: (n: number, total: number) => `선물 ${n}/${total}`,
@@ -88,6 +98,8 @@ export const COPY = {
     edit: "편지 수정하기",
     back: "마을로 돌아가기",
     copyLink: "마을 주소 복사",
+    copyCardLink: "카드 링크 복사",
+    linkNote: "링크를 받은 사람은 이 편지를 볼 수 있어요.",
     failed: "카드를 그리지 못했어요. 다시 시도해주세요.",
     alt: (to: string) => `${to}에게 보내는 크리스마스 카드`,
   },
@@ -98,6 +110,9 @@ export const COPY = {
     unsupported: "이 브라우저는 바로 공유할 수 없어요. 이미지를 저장해 메신저로 보내주세요.",
     failed: "공유하지 못했어요. 이미지를 저장해 보내주세요.",
     linkCopied: "마을 주소를 복사했어요.",
+    cardText: (to: string, url: string) =>
+      `${to}에게 크리스마스 카드가 도착했어요. 선물을 열어보세요.\n${url}`,
+    cardLinkCopied: "카드 링크를 복사했어요. 메신저에 붙여 보내주세요.",
     holdToSave: "이미지를 길게 눌러 사진에 저장할 수도 있어요.",
   },
   nav: {

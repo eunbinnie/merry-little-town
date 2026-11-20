@@ -129,11 +129,11 @@ export function downloadBlob(blob: Blob, name = POSTCARD_FILENAME): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-const siteUrl = () => `${window.location.origin}${BASE_PATH}/`;
+export const siteUrl = () => `${window.location.origin}${BASE_PATH}/`;
 
-export async function copyLink(): Promise<boolean> {
+export async function copyLink(url = siteUrl()): Promise<boolean> {
   try {
-    await navigator.clipboard.writeText(siteUrl());
+    await navigator.clipboard.writeText(url);
     return true;
   } catch {
     return false;
@@ -152,7 +152,11 @@ export const canShareFiles = (): boolean =>
  * Hand the PNG to the system share sheet (KakaoTalk, Messages, Instagram…).
  * Cancelling is a normal outcome; nothing is reported as shared unless it was.
  */
-export async function shareImage(blob: Blob, name = POSTCARD_FILENAME): Promise<ShareResult> {
+export async function shareImage(
+  blob: Blob,
+  name = POSTCARD_FILENAME,
+  text = COPY.share.text(siteUrl()),
+): Promise<ShareResult> {
   const file = new File([blob], name, { type: "image/png" });
   if (!navigator.canShare?.({ files: [file] })) return "unsupported";
   try {
@@ -161,7 +165,7 @@ export async function shareImage(blob: Blob, name = POSTCARD_FILENAME): Promise<
     await navigator.share({
       files: [file],
       title: COPY.photo.shareTitle,
-      text: COPY.share.text(siteUrl()),
+      text,
     });
     return "shared";
   } catch (e) {

@@ -8,6 +8,7 @@ import {
   isComplete,
   type GiftId,
   type HouseId,
+  type WrapId,
 } from "@/features/village/game";
 import { dispatch, useVillage } from "@/features/village/store";
 import {
@@ -16,8 +17,11 @@ import {
   copyLink,
   downloadBlob,
   shareImage,
+  siteUrl,
 } from "@/features/sharing/postcard";
 import { composeCard, type CardText } from "@/features/sharing/card";
+import { decodeCardHash, encodeCardHash, type ReceivedCard } from "@/features/sharing/link";
+import { ReceivedNote } from "@/components/card/ReceivedNote";
 import { ASSET_ROOT, BUILDING_IDS } from "@/game/world";
 import type { Destination, GameEvent, GameHandle, SceneShot } from "@/game/types";
 import { CardEditor } from "@/components/card/CardEditor";
@@ -31,6 +35,7 @@ import type { Pt } from "@/game/world";
 const TOTAL = HOUSE_IDS.length;
 const asset = (rel: string) => `${ASSET_ROOT}/${rel}`;
 
+type Guest = { card: ReceivedCard; stage: "landing" | "arriving" | "open" };
 type Toast = { id: number; title: string; body?: string; items?: GiftId[] };
 type Photo = { url: string; blob: Blob };
 /**
@@ -40,6 +45,7 @@ type Photo = { url: string; blob: Blob };
 type Card = {
   houseId: HouseId;
   giftId: GiftId;
+  wrapId: WrapId;
   fresh: boolean;
   stage: "writing" | "leaving" | "preview";
   text: CardText;
@@ -89,6 +95,13 @@ export function ChristmasVillage() {
   const [mapAt, setMapAt] = useState<Pt | null>(null); // Santa's spot when the map was opened
   // the guide only shows while playing, never in the server HTML
   const [guided, setGuided] = useState(() => typeof window === "undefined" || loadView().guided);
+  // a card from someone's link (#c=…); the landing isn't in the server HTML, so no mismatch
+  const [guest, setGuest] = useState<Guest | null>(() => {
+    const c = typeof window === "undefined" ? null : decodeCardHash(window.location.hash);
+    return c && { card: c, stage: "landing" };
+  });
+  /** Whoever sent the received card: the To of the player's first card, as a reply. */
+  const replyTo = useRef("");
 
   // Phaser is loaded only in the browser, once; React state never recreates it
   useEffect(() => {
@@ -114,12 +127,14 @@ export function ChristmasVillage() {
           setCard({
             houseId: e.houseId,
             giftId: e.giftId,
+            wrapId: e.wrapId,
             fresh: e.fresh,
             stage: "writing",
-            text: { to: "", message: "", from: "" },
+            text: { to: e.fresh ? replyTo.current : "", message: "", from: "" },
             shot: null,
             image: null,
           });
+          if (e.fresh) replyTo.current = "";
           setAnnouncement(
             e.fresh ? COPY.card.deliveredTitle : COPY.card.revisitTitle(HOUSE_NAMES[e.houseId]),
           );
@@ -149,7 +164,7 @@ export function ChristmasVillage() {
 
   useSoundUnlock();
   // the music steps back while a card is open
-  const cardOpen = card !== null;
+  const cardOpen = card !== null || guest?.stage === "open";
   useEffect(() => {
     if (!cardOpen) return;
     duckMusic("card", 0.45);
@@ -165,7 +180,8 @@ export function ChristmasVillage() {
   const deliveries = village?.deliveries ?? [];
   const sack = village?.sack ?? [];
   const complete = village ? isComplete(village) : false;
-  const playing = ready && started && !intro;
+  // HUD and hints wait until a received card has been read
+  const playing = ready && started && !intro && !guest;
 
   const hint = !playing
     ? ""
@@ -201,9 +217,9 @@ export function ChristmasVillage() {
     downloadBlob(blob, name);
     setShareStatus(COPY.share.saved);
   };
-  const share = async (blob: Blob, name?: string) => {
+  const share = async (blob: Blob, name?: string, text?: string) => {
     setShareStatus("");
-    const r = await shareImage(blob, name);
+    const r = await shareImage(blob, name, text);
     setShareStatus(
       r === "shared"
         ? COPY.share.shared
@@ -214,8 +230,30 @@ export function ChristmasVillage() {
             : "", // cancelled: nothing happened, nothing to say
     );
   };
-  const copy = async () => {
-    if (await copyLink()) setShareStatus(COPY.share.linkCopied);
+  const copy = async (url?: string, done: string = COPY.share.linkCopied) => {
+    if (await copyLink(url)) setShareStatus(done);
+  };
+
+  // ---- a received card: the gift waits at the sender's house, then the note opens
+  const openGift = async () => {
+    const g = guest;
+    if (!g || !game.current) return;
+    setGuest({ ...g, stage: "arriving" });
+    if (!started) {
+      dispatch({ type: "start" });
+      game.current.skipIntro();
+    }
+    await game.current.showGuestGift(g.card.houseId, g.card.wrapId);
+    playSound("paper");
+    setGuest({ ...g, stage: "open" });
+    setAnnouncement(COPY.received.title);
+  };
+  const reply = () => {
+    replyTo.current = guest?.card.from ?? "";
+    setGuest(null);
+    // a later visit starts in the player's own village, not at this card
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+    game.current?.clearGuestGift();
   };
 
   // ---- the personal card
@@ -251,6 +289,18 @@ export function ChristmasVillage() {
     setShareStatus("");
   }, []);
   const cardFile = card ? `christmas-card-${card.houseId}.png` : undefined;
+  // made from the card in memory, only when the player shares or copies it
+  const cardLink =
+    card &&
+    siteUrl() +
+      encodeCardHash({
+        houseId: card.houseId,
+        giftId: card.giftId,
+        wrapId: card.wrapId,
+        to: card.text.to.trim(),
+        message: card.text.message.trim(),
+        from: card.text.from.trim(),
+      });
 
   const reset = () => {
     dispatch({ type: "reset" });
@@ -277,17 +327,30 @@ export function ChristmasVillage() {
         </div>
       )}
 
-      {village && !started && (
+      {village && (!started || guest?.stage === "landing") && (
         <section className="absolute inset-0 z-30 flex flex-col items-center justify-between bg-[linear-gradient(to_bottom,rgb(10_16_29/0.55),transparent_40%,transparent_60%,rgb(10_16_29/0.7))] px-6 pt-[calc(env(safe-area-inset-top)+8vh)] pb-[calc(env(safe-area-inset-bottom)+44px)] text-center">
-          <div className="fade-in">
-            <h1 className="ui-shadow text-[clamp(1.6rem,6.6vw,2.9rem)] leading-tight font-bold text-ivory">
-              {COPY.landing.titleLines[0]} <br className="sm:hidden" />
-              {COPY.landing.titleLines[1]}
-            </h1>
-            <p className="ui-shadow mt-3 text-base text-ivory/85 sm:text-lg">
-              {COPY.landing.description}
-            </p>
-          </div>
+          {guest ? (
+            <div className="fade-in">
+              <h1 className="ui-shadow text-[clamp(1.4rem,5.8vw,2.6rem)] leading-tight font-bold wrap-break-word text-ivory">
+                {COPY.received.titleLines(guest.card.to)[0]}
+                <br />
+                {COPY.received.titleLines(guest.card.to)[1]}
+              </h1>
+              <p className="ui-shadow mt-3 font-hand text-2xl text-glow">
+                {COPY.received.from(guest.card.from)}
+              </p>
+            </div>
+          ) : (
+            <div className="fade-in">
+              <h1 className="ui-shadow text-[clamp(1.6rem,6.6vw,2.9rem)] leading-tight font-bold text-ivory">
+                {COPY.landing.titleLines[0]} <br className="sm:hidden" />
+                {COPY.landing.titleLines[1]}
+              </h1>
+              <p className="ui-shadow mt-3 text-base text-ivory/85 sm:text-lg">
+                {COPY.landing.description}
+              </p>
+            </div>
+          )}
           <div className="fade-in flex w-full max-w-xs flex-col items-center gap-2">
             <button
               type="button"
@@ -296,10 +359,11 @@ export function ChristmasVillage() {
               autoFocus
               onClick={() => {
                 unlockSound();
-                dispatch({ type: "start" });
+                if (guest) void openGift();
+                else dispatch({ type: "start" });
               }}
             >
-              {COPY.landing.cta}
+              {guest ? COPY.received.cta : COPY.landing.cta}
             </button>
             <SoundToggle />
           </div>
@@ -321,6 +385,8 @@ export function ChristmasVillage() {
           </button>
         </div>
       )}
+
+      {guest?.stage === "open" && <ReceivedNote card={guest.card} onReply={reply} />}
 
       {card?.stage === "writing" && (
         <CardEditor
@@ -351,7 +417,9 @@ export function ChristmasVillage() {
           body={COPY.card.previewBody}
           status={shareStatus}
           canShare={canShareFiles()}
-          onShare={() => share(card.image!.blob, cardFile)}
+          onShare={() =>
+            share(card.image!.blob, cardFile, COPY.share.cardText(card.text.to.trim(), cardLink!))
+          }
           onSave={() => save(card.image!.blob, cardFile)}
           onEdit={() => {
             playSound("paper");
@@ -359,7 +427,9 @@ export function ChristmasVillage() {
           }}
           onClose={closeCard}
           closeLabel={COPY.card.back}
-          onCopyLink={copy}
+          onCopyLink={() => copy(cardLink!, COPY.share.cardLinkCopied)}
+          linkLabel={COPY.card.copyCardLink}
+          note={COPY.card.linkNote}
         />
       )}
       {photo && (
@@ -373,7 +443,7 @@ export function ChristmasVillage() {
           onSave={() => save(photo.blob)}
           onClose={closePhoto}
           closeLabel={COPY.photo.close}
-          onCopyLink={copy}
+          onCopyLink={() => copy()}
         />
       )}
 
