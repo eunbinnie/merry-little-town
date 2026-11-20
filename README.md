@@ -14,7 +14,7 @@ pnpm dev               # http://localhost:3000
 pnpm build && pnpm start   # static export to out/, served locally
 pnpm lint              # ESLint
 pnpm typecheck         # tsc --noEmit (strict)
-pnpm test              # node:test: game rules, save migration, map walkability, card text
+pnpm test              # node:test: game rules, save migration, map walkability, card text, card links
 pnpm format            # Prettier (format:check in CI)
 pnpm assets:generate   # regenerate every sprite, the ground, the OG image and the favicon
 ```
@@ -97,12 +97,16 @@ Everything you hear is synthesised in the browser (`src/audio/`). There are no a
   - Explicit line breaks are kept.
   - The text shrinks from 56 px down to 32 px until it fits.
 - **Limits.** Names are capped at 20 characters and messages at 150. Characters are counted as users perceive them, and limits apply after IME composition ends. Messages can have at most 8 lines.
-- **Privacy.** Names and messages exist only in memory while the card is open. They are never stored or sent anywhere, and closing the card discards them.
+- **Privacy.** Names and messages exist only in memory while the card is open. They are never stored, and closing the card discards them. They leave the page only when the player shares the card: in the image, and in the card link, which carries the same text in its `#hash`. The hash never reaches the server, but anyone who has the link can read the card. The preview says so under the link.
 - **Sharing.**
   - The preview shows the exact PNG that is saved or shared.
-  - "Share" passes the file to `navigator.share` when `navigator.canShare` allows it, with a short line and the village link in `text` (not `url`, which iOS drops for many targets when files are attached). Cancelling the share sheet is a normal outcome, not an error.
+  - "Share" passes the file to `navigator.share` when `navigator.canShare` allows it, with a short line and the card link in `text` (not `url`, which iOS drops for many targets when files are attached). Cancelling the share sheet is a normal outcome, not an error.
   - Without file sharing, the sheet suggests saving the image or long-pressing it.
-  - "마을 주소 복사" copies the public link as a separate action.
+  - "카드 링크 복사" copies the card link as a separate action. The free photo copies the plain village link instead.
+- **Receiving a card.** A card link (`#c=` + base64url JSON, `features/sharing/link.ts`) opens on "OO에게 크리스마스 카드가 도착했어요".
+  - "선물 열어보기" skips the intro. The camera finds the sender's house, its windows light up and the gift sits on the doorstep. This is only shown, never saved, so the receiver's own village is untouched.
+  - The note opens read-only. "나도 산타 되기" opens the gift (it disappears), removes the hash so later visits start normally, and hands the village to the receiver. Their first card is addressed to the sender.
+  - Anyone can write a link, so every field is checked against the known houses, gifts and wraps and the editor's limits. The text is only ever rendered as text. A link that doesn't parse opens the normal landing.
 
 ## How the art is made
 
@@ -144,8 +148,8 @@ src/
   audio/                    instruments.ts (the band), music.ts (scores), synth.ts (foley + bank), sound.ts
   components/christmas/     React overlay: landing, HUD, sound menu, toasts, hints, photo sheet
   features/village/         game.ts (pure reducer + save validation), store.ts (shared store)
-  components/card/          card editor (paper note) and postcard preview sheet
-  features/sharing/         card.ts (personal postcard), postcard.ts (free photo, share, download), text.ts
+  components/card/          card editor (paper note), received note, postcard preview sheet
+  features/sharing/         card.ts (personal postcard), postcard.ts (free photo, share, download), link.ts (card links), text.ts
   lib/storage/              the only module that touches LocalStorage
   constants/                copy (all Korean text), sprite metadata
 scripts/                    asset generator
