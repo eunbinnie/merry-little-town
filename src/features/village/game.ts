@@ -112,7 +112,7 @@ export function reduce(s: VillageState, a: Action): VillageState {
   }
 }
 
-const isOneOf = <T extends string>(list: readonly T[], v: unknown): v is T =>
+export const isOneOf = <T extends string>(list: readonly T[], v: unknown): v is T =>
   typeof v === "string" && (list as readonly string[]).includes(v);
 
 function parseGift(raw: unknown): Gift | null {
