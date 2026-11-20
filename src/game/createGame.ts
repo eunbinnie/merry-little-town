@@ -33,6 +33,8 @@ export function createGame(parent: HTMLElement, emit: (e: GameEvent) => void): G
     capture: () => scene.capture(),
     leaveHouse: () => scene.leaveHouse(),
     endCard: () => scene.endCard(),
+    showGuestGift: (house, wrap) => scene.showGuestGift(house, wrap),
+    clearGuestGift: () => scene.clearGuestGift(),
     destroy: () => game.destroy(true),
   };
 }

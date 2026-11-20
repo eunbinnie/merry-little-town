@@ -34,5 +34,9 @@ export type GameHandle = {
   leaveHouse(): Promise<SceneShot>;
   /** Close the card flow and give the village back to the player. */
   endCard(): void;
+  /** A gift from a card link: light that house and show the gift. Shown only, never saved. */
+  showGuestGift(houseId: HouseId, wrapId: WrapId): Promise<void>;
+  /** The received card was read: the guest gift goes and the village is the player's again. */
+  clearGuestGift(): void;
   destroy(): void;
 };

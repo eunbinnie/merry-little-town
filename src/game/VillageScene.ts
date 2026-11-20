@@ -14,6 +14,7 @@ import {
   type GiftId,
   type HouseId,
   type VillageState,
+  type WrapId,
 } from "@/features/village/game";
 import { dispatch, getVillage, subscribeVillage } from "@/features/village/store";
 import {
@@ -135,6 +136,8 @@ export class VillageScene extends Phaser.Scene {
   private cleanup: Array<() => void> = [];
   /** House whose card is being written; the scene stays paused meanwhile. */
   private cardHouse: HouseId | null = null;
+  /** Lit only for a received card; not part of the saved village. */
+  private guestHouse: HouseId | null = null;
   private finaleDone = false;
   private sleighReturn: Promise<void> = Promise.resolve();
   private bellsAt: Pt = [0, 0];
@@ -1355,6 +1358,43 @@ export class VillageScene extends Phaser.Scene {
     } else this.setBusy(false);
   }
 
+  // ---------------------------------------------------------------- a received card
+
+  /** Someone left a gift here for the player: the camera finds it, the windows light up. */
+  async showGuestGift(id: HouseId, wrap: WrapId): Promise<void> {
+    this.setBusy(true);
+    const b = BUILDINGS[id];
+    const m = BUILDING_META[id];
+    const view = this.cameras.main.worldView;
+    await this.pan(b.x + m.w / 2, b.y + m.door[1] + view.height * 0.16, 1600);
+    // a house the player already served keeps its own gift and lights
+    if (!isDelivered(this.state, id)) {
+      this.guestHouse = id;
+      this.placeGift(id, wrap, false);
+      await this.lightHouse(id, false);
+    }
+    this.sparkles.explode(9, b.x + m.gift[0], b.y + m.gift[1] - 6);
+  }
+
+  /** The card was read: the gift is opened and gone, and the village is the player's again. */
+  clearGuestGift(): void {
+    const id = this.guestHouse;
+    this.guestHouse = null;
+    if (id && !isDelivered(this.state, id)) {
+      const h = this.houses.get(id)!;
+      this.tweens.killTweensOf([h.lit, h.decor, h.glow]);
+      h.steady = false;
+      this.tweens.add({ targets: [h.lit, h.decor, h.glow], alpha: 0, duration: 900, delay: 400 });
+      if (h.gift) {
+        this.sparkles.explode(12, h.gift.x, h.gift.y - 6);
+        h.gift.destroy();
+        h.gift = null;
+      }
+    }
+    this.follow(this.santa.sprite);
+    this.setBusy(false);
+  }
+
   // ---------------------------------------------------------------- store sync
 
   private onStore(): void {
@@ -1388,6 +1428,7 @@ export class VillageScene extends Phaser.Scene {
     this.lamps.forEach((l) => (l.on = !this.lampWanted(l)));
     this.finaleDone = false;
     this.cardHouse = null;
+    this.guestHouse = null;
     this.refreshLamps(true);
     this.santa.stop();
     this.santa.place(SPAWN);
